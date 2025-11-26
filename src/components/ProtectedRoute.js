@@ -1,11 +1,12 @@
 // components/ProtectedRoute.js
 import { useAuth } from '../context/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { Container, Alert, Spinner } from 'react-bootstrap';
 
 function ProtectedRoute({ children, requiredPermission }) {
     const { hasAccess, isAuthenticated, loading } = useAuth();
-    
+    const location = useLocation();
+
     if (loading) {
         return (
             <Container className="text-center mt-4">
@@ -15,11 +16,11 @@ function ProtectedRoute({ children, requiredPermission }) {
             </Container>
         );
     }
-    
+
     if (!isAuthenticated) {
-        return <Navigate to="/login" />;
+        return <Navigate to="/login" state={{ from: location }} replace />;
     }
-    
+
     if (requiredPermission && !hasAccess(requiredPermission.module, requiredPermission.action)) {
         return (
             <Container className="mt-4">
@@ -30,7 +31,7 @@ function ProtectedRoute({ children, requiredPermission }) {
             </Container>
         );
     }
-    
+
     return children;
 }
 

@@ -21,14 +21,20 @@ export const AuthProvider = ({ children }) => {
 
     const checkAuth = async () => {
         const token = localStorage.getItem('token');
-        if (token) {
+        const savedUser = localStorage.getItem('user');
+
+        if (token && savedUser) {
             try {
+                // Vérifier que le token est toujours valide
                 const response = await authService.getCurrentUser();
                 setUser(response.data);
             } catch (error) {
                 console.error('Erreur vérification auth:', error);
-                logout();
+                logout(); // Déconnecter si token invalide
             }
+        } else {
+            // Pas de token ou user en localStorage
+            setUser(null);
         }
         setLoading(false);
     };
