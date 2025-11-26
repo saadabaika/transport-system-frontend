@@ -18,7 +18,7 @@ function ProtectedRoute({ children, requiredPermission }) {
     }
 
     if (!isAuthenticated) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
+        return <Navigate to="/login" />;
     }
 
     if (requiredPermission && !hasAccess(requiredPermission.module, requiredPermission.action)) {

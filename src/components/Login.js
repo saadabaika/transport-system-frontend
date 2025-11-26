@@ -1,24 +1,15 @@
-import React, { useState , useEffect } from 'react';
+import React, { useState } from 'react';
 import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
-
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showTestAccounts, setShowTestAccounts] = useState(false); // Nouvel état
-    const { login, isAuthenticated } = useAuth();
+    const { login } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
-
-    useEffect(() => {
-        if (isAuthenticated) {
-            const from = location.state?.from?.pathname || '/';
-            navigate(from, { replace: true });
-        }
-    }, [isAuthenticated, navigate, location]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -36,15 +27,6 @@ const Login = () => {
         setLoading(false);
     };
 
-    if (isAuthenticated) {
-        return (
-            <Container className="text-center mt-4">
-                <Spinner animation="border" role="status">
-                    <span className="visually-hidden">Redirection...</span>
-                </Spinner>
-            </Container>
-        );
-    }
     return (
         <Container fluid className="bg-light min-vh-100 d-flex align-items-center py-4">
             <Row className="w-100 justify-content-center">
