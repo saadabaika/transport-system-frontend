@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // ⭐ AJOUT de useEffect
 import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -7,15 +7,21 @@ const Login = () => {
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [showTestAccounts, setShowTestAccounts] = useState(false); // Nouvel état
-    const { login } = useAuth();
+    const [showTestAccounts, setShowTestAccounts] = useState(false);
+    const { login, isAuthenticated } = useAuth(); // ⭐ AJOUT de isAuthenticated
     const navigate = useNavigate();
+
+    // ⭐ NOUVEAU : Rediriger si déjà connecté
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/');
+        }
+    }, [isAuthenticated, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
-
 
         const result = await login(credentials);
 
@@ -26,6 +32,17 @@ const Login = () => {
         }
         setLoading(false);
     };
+
+    // ⭐ Si déjà authentifié, ne rien afficher (le useEffect va rediriger)
+    if (isAuthenticated) {
+        return (
+            <Container fluid className="bg-light min-vh-100 d-flex align-items-center justify-content-center">
+                <Spinner animation="border" role="status">
+                    <span className="visually-hidden">Redirection...</span>
+                </Spinner>
+            </Container>
+        );
+    }
 
     return (
         <Container fluid className="bg-light min-vh-100 d-flex align-items-center py-4">
@@ -96,8 +113,6 @@ const Login = () => {
                                     )}
                                 </Button>
                             </Form>
-
-
                         </Card.Body>
                     </Card>
                 </Col>

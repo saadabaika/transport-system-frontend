@@ -724,11 +724,11 @@ function Facturation() {
 
             if (facture.entreprise === 'ars_distribution') {
                 doc.text('ARS DISTRIBUTION - Bd Moulay Ismail Bloc 20 NO.57 Casablanca', 105, pageHeight - 23, { align: 'center' });
-                doc.text('Tél: +212 522-000000 | E-mail: ars.distribution1@gmail.com', 105, pageHeight - 19, { align: 'center' });
+                doc.text('Tél: +212 661-638266 | E-mail: ars.distribution1@gmail.com', 105, pageHeight - 19, { align: 'center' });
                 doc.text('R.C : 518669 - Patente : 31302654 - I.F : 50575265 - C.N.S.S : 4355737 - ICE : 002910748000077', 105, pageHeight - 15, { align: 'center' });
             } else {
                 doc.text('ARN LOGISTIQUE - 228, bd Mohamed V 7ème étage Bureau 200 Casablanca', 105, pageHeight - 23, { align: 'center' });
-                doc.text('Tél: +212 522-000000 | E-mail: adli.rachid@homail.fr', 105, pageHeight - 19, { align: 'center' });
+                doc.text('Tél: +212 661-638266 | E-mail: adli.rachid@homail.fr', 105, pageHeight - 19, { align: 'center' });
                 doc.text('R.C 253799 - Patente 32190745 - I.F : 40467063 - C.N.S.S. 9029390 - ICE 000062536000007', 105, pageHeight - 15, { align: 'center' });
             }
 
