@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://164.90.221.86:8080/api';
+const isProduction = window.location.protocol === 'https:';
+export const API_URL = isProduction 
+    ? 'https://164.90.221.86/api' 
+    : 'http://164.90.221.86:8080/api';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
