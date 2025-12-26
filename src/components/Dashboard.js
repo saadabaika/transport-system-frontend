@@ -64,6 +64,8 @@ const BarChart = ({ data, title, color = '#007bff', height = 200 }) => {
 };
 
 // Composant pour le graphique en barres horizontales
+// Composant pour le graphique en barres horizontales
+// Composant pour le graphique en barres horizontales
 const HorizontalBarChart = ({ data, title, color = '#28a745', height = 300 }) => {
     if (!data || data.length === 0) {
         return (
@@ -74,6 +76,7 @@ const HorizontalBarChart = ({ data, title, color = '#28a745', height = 300 }) =>
     }
 
     const maxValue = Math.max(...data.map(item => item.value));
+    const totalValue = data.reduce((sum, item) => sum + item.value, 0);
 
     return (
         <Card className="h-100">
@@ -81,7 +84,13 @@ const HorizontalBarChart = ({ data, title, color = '#28a745', height = 300 }) =>
                 <h6 className="mb-0" style={{ fontSize: '14px' }}>{title}</h6>
             </Card.Header>
             <Card.Body className="py-3">
-                <div style={{ height: `${height}px`, position: 'relative' }}>
+                {/* ⭐ AJOUTER UN CONTENEUR AVEC SCROLL */}
+                <div style={{
+                    height: `${height}px`,
+                    position: 'relative',
+                    overflowY: 'auto', // ⭐ Scroll vertical
+                    paddingRight: '8px' // Espace pour la scrollbar
+                }}>
                     {data.map((item, index) => (
                         <div key={index} className="mb-2">
                             <div className="d-flex justify-content-between mb-1">
@@ -119,7 +128,7 @@ const HorizontalBarChart = ({ data, title, color = '#28a745', height = 300 }) =>
                                         fontWeight: 'bold',
                                         fontSize: '9px'
                                     }}>
-                                        {Math.round((item.value / maxValue) * 100)}%
+                                        {Math.round((item.value / totalValue) * 100)}%
                                     </small>
                                 </div>
                             </div>
@@ -307,15 +316,15 @@ function Dashboard() {
         const finMois = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 0);
 
         setFiltres({
-            date_debut: debutMois.toISOString().split('T')[0],
-            date_fin: finMois.toISOString().split('T')[0]
+            date_debut: debutMois.toLocaleDateString('en-CA'),
+            date_fin: finMois.toLocaleDateString('en-CA')
         });
 
         // ⭐ Initialiser aussi les dates pour les factures
         setFiltresFactures(prev => ({
             ...prev,
-            date_debut_facture: debutMois.toISOString().split('T')[0],
-            date_fin_facture: finMois.toISOString().split('T')[0]
+            date_debut_facture: debutMois.toLocaleDateString('en-CA'),
+            date_fin_facture: finMois.toLocaleDateString('en-CA')
         }));
     }, []);
 
@@ -432,6 +441,7 @@ function Dashboard() {
             setLoading(false);
         }
     };
+
 
     // ⭐ CALCULS SPÉCIFIQUES POUR LA FACTURATION
     const calculerStatistiquesFacturation = async (factures, clients, trajets) => {
@@ -563,6 +573,10 @@ function Dashboard() {
         const totalFraisDeplacement = trajets.reduce((sum, t) => sum + parseFloat(t.frais_deplacement || 0), 0);
         const totalChargesMensuelles = charges.filter(c => c.type_charge === 'mensuelle')
             .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0);
+        // ⭐ CALCUL DU TOTAL KILOMÉTRAGE
+        const totalKilometrage = charges
+            .filter(c => c.categorie === 'gazoil' && c.kilometrage)
+            .reduce((sum, charge) => sum + (parseInt(charge.kilometrage) || 0), 0);
 
         return {
             camionsAvecStats,
@@ -573,6 +587,7 @@ function Dashboard() {
             totalFraisSupplementaires,
             totalFraisDeplacement,
             totalChargesMensuelles,
+            totalKilometrage, // ⭐ NOUVEAU : Total kilométrage
             totalRevenus: trajets.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0),
             totalTrajets: trajets.length,
             trajetsInterne: trajets.filter(t => t.type_sous_traitance === 'interne').length,
@@ -1038,10 +1053,10 @@ function Dashboard() {
                     doc.text('ARS Distribution & ARN Logistique', pageWidth / 2, pageHeight - 19, { align: 'center' });
                 } else if (entrepriseDetectee === 'ars_distribution') {
                     doc.text('ARS DISTRIBUTION - Bd Moulay Ismail Bloc 20 NO.57 Casablanca', pageWidth / 2, pageHeight - 23, { align: 'center' });
-                    doc.text('Tél: +212 522-000000 | E-mail: ars.distribution1@gmail.com', pageWidth / 2, pageHeight - 19, { align: 'center' });
+                    doc.text('Tél: +212 661-638266 | E-mail: ars.distribution1@gmail.com', pageWidth / 2, pageHeight - 19, { align: 'center' });
                 } else {
-                    doc.text('ARN LOGISTIQUE - 228, bd Mohamed V 7ème étage Bureau 200 Casablanca', pageWidth / 2, pageHeight - 23, { align: 'center' });
-                    doc.text('Tél: +212 522-000000 | E-mail: adli.rachid@homail.fr', pageWidth / 2, pageHeight - 19, { align: 'center' });
+                    doc.text('ARN LOGISTIC - 228, bd Mohamed V 7ème étage Bureau 200 Casablanca', pageWidth / 2, pageHeight - 23, { align: 'center' });
+                    doc.text('Tél: +212 661-638266 | E-mail: adli.rachid@homail.fr', pageWidth / 2, pageHeight - 19, { align: 'center' });
                 }
 
                 // Numéro de page
@@ -1243,9 +1258,9 @@ function Dashboard() {
                         <Card className="text-center border-primary shadow-sm h-100">
                             <Card.Body className="p-2">
                                 <div className="text-primary mb-1" style={{ fontSize: '1.5rem' }}>🚛</div>
-                                <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Camions</Card.Title>
-                                <h6 className="text-primary mb-0">{stats.camions}</h6>
-                                <small className="text-muted" style={{ fontSize: '10px' }}>Total</small>
+                                <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Trajets</Card.Title>
+                                <h6 className="text-primary mb-0">{stats.trajets}</h6>
+                                <small className="text-muted" style={{ fontSize: '10px' }}>Période</small>
                             </Card.Body>
                         </Card>
                     </Col>
@@ -1253,12 +1268,14 @@ function Dashboard() {
 
                 {!isFacturation && canAccessEmployes && (
                     <Col xs={6} sm={4} md={2}>
-                        <Card className="text-center border-success shadow-sm h-100">
+                        <Card className="text-center border-indigo shadow-sm h-100">
                             <Card.Body className="p-2">
-                                <div className="text-success mb-1" style={{ fontSize: '1.5rem' }}>👨‍💼</div>
-                                <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Employés</Card.Title>
-                                <h6 className="text-success mb-0">{stats.employes}</h6>
-                                <small className="text-muted" style={{ fontSize: '10px' }}>Total</small>
+                                <div className="text-indigo mb-1" style={{ fontSize: '1.5rem' }}>📏</div>
+                                <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Kilométrage</Card.Title>
+                                <h6 className="text-indigo mb-0">
+                                    {statistiquesDetaillees?.totalKilometrage?.toLocaleString() || 0} km
+                                </h6>
+                                <small className="text-muted" style={{ fontSize: '10px' }}>Kilomètres parcourus</small>
                             </Card.Body>
                         </Card>
                     </Col>
@@ -1268,15 +1285,19 @@ function Dashboard() {
                     <Card className="text-center border-info shadow-sm h-100">
                         <Card.Body className="p-2">
                             <div className="text-info mb-1" style={{ fontSize: '1.5rem' }}>
-                                {isFacturation ? '🧾' : '📦'}
+                                {isFacturation ? '🧾' : '🏁'}
                             </div>
                             <Card.Title className="mb-1" style={{ fontSize: '12px' }}>
-                                {isFacturation ? 'Factures' : 'Trajets'}
+                                {isFacturation ? 'Factures' : 'Frais Déplacement'}
                             </Card.Title>
                             <h6 className="text-info mb-0">
-                                {isFacturation ? statistiquesDetaillees?.totalFactures || 0 : stats.trajets}
+                                {isFacturation ?
+                                    `${statistiquesDetaillees?.totalFactures || 0}` : `${statistiquesDetaillees?.totalFraisDeplacement?.toLocaleString() || 0} DH` // Avec "DH" pour autres
+                                }
                             </h6>
-                            <small className="text-muted" style={{ fontSize: '10px' }}>Période</small>
+                            {!isFacturation && (
+                                <small className="text-muted" style={{ fontSize: '10px' }}>Chauffeurs</small>
+                            )}
                         </Card.Body>
                     </Card>
                 </Col>
@@ -1330,10 +1351,28 @@ function Dashboard() {
                         <Col xs={6} sm={4} md={2}>
                             <Card className="text-center border-secondary shadow-sm h-100">
                                 <Card.Body className="p-2">
-                                    <div className="text-secondary mb-1" style={{ fontSize: '1.5rem' }}>⛽</div>
+                                    <div className="text-secondary mb-1" style={{ fontSize: '1.5rem' }}>⚡</div>
                                     <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Charges Mens.</Card.Title>
                                     <h6 className="text-secondary mb-0">
-                                        {statistiquesDetaillees?.totalChargesMensuelles?.toLocaleString() || 0} DH
+                                        {(
+                                            (statistiquesDetaillees?.totalChargesMensuelles || 0) -
+                                            (statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) =>
+                                                total + (camion.charges?.gazoil || 0), 0) || 0)
+                                        ).toLocaleString()} DH
+                                    </h6>
+                                    <small className="text-muted" style={{ fontSize: '10px' }}>Période</small>
+                                </Card.Body>
+                            </Card>
+                        </Col>
+                        <Col xs={6} sm={4} md={2}>
+                            <Card className="text-center border-secondary shadow-sm h-100">
+                                <Card.Body className="p-2">
+                                    <div className="text-secondary mb-1" style={{ fontSize: '1.5rem' }}>⛽</div>
+                                    <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Gazoil</Card.Title>
+                                    <h6 className="text-secondary mb-0">
+                                        {/* ⭐ CALCULER LE TOTAL DU GAZOIL */}
+                                        {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) =>
+                                            total + (camion.charges?.gazoil || 0), 0)?.toLocaleString() || 0} DH
                                     </h6>
                                     <small className="text-muted" style={{ fontSize: '10px' }}>Période</small>
                                 </Card.Body>

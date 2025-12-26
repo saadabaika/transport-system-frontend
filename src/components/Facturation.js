@@ -520,9 +520,15 @@ function Facturation() {
         }
 
         // ESPACE AJOUTÉ ICI - TITRE FACTURE PLUS BAS
+        // TITRE FACTURE AVEC OMBRE
+        // Ombre
         doc.setFontSize(28);
-        doc.setTextColor(...secondaryColor);
+        doc.setTextColor(200, 200, 200); // Gris clair pour l'ombre
         doc.setFont('helvetica', 'bold');
+        doc.text('FACTURE', 106, 51, { align: 'center' });
+
+        // Texte principal
+        doc.setTextColor(...secondaryColor);
         doc.text('FACTURE', 105, 50, { align: 'center' });
 
         // Informations facture - Position ajustée avec ESPACE AJOUTÉ
@@ -577,7 +583,7 @@ function Facturation() {
 
             // Gestion du texte long pour la description
             const lines = doc.splitTextToSize(description, 55);
-            const lineHeight = Math.max(8, lines.length * 3.5);
+            const lineHeight = Math.max(12, lines.length * 4.5);
 
             // ⭐ CORRECTION : Vérifier si la ligne dépasse la zone de contenu (avant le pied de page)
             if (yPosition + lineHeight > 230) { // 230 au lieu de 250 pour laisser de la place pour les totaux
@@ -636,12 +642,21 @@ function Facturation() {
         }
 
         // TOTAUX
-        yPosition += 15;
+        yPosition += 6;
 
         // Cadre pour les totaux
         doc.setDrawColor(...primaryColor);
-        doc.setLineWidth(0.5);
+        doc.setLineWidth(0.7);
         doc.rect(120, yPosition, 75, 40);
+
+        // ⭐ NOTES à gauche du cadre
+        if (facture.notes) {
+            const notesLines = doc.splitTextToSize(` ${facture.notes}`, 100);
+            notesLines.forEach((line, index) => {
+                // Aligner avec le haut du cadre
+                doc.text(line, 20, yPosition + 8 + (index * 4));
+            });
+        }
 
         doc.setFontSize(10);
         doc.setTextColor(...secondaryColor);
@@ -669,9 +684,9 @@ function Facturation() {
             yPosition = 30;
         }
 
-        doc.setFontSize(9);
+        doc.setFontSize(10);
         doc.setTextColor(...secondaryColor);
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('helvetica', 'bold');
         const montantEnLettres = nombreEnLettres(totalTTC);
         const lignesMontant = doc.splitTextToSize(`Arrêtée la présente facture à la somme de ${montantEnLettres}`, 110);
         lignesMontant.forEach((line, index) => {
@@ -691,20 +706,7 @@ function Facturation() {
         doc.setLineWidth(0.3);
         doc.line(140, yPosition + 2, 180, yPosition + 2);
 
-        // CONDITIONS - ⭐ CORRECTION : Vérifier l'espace
-        yPosition += 15;
 
-        if (yPosition > 250) {
-            doc.addPage();
-            yPosition = 30;
-        }
-
-        if (facture.notes) {
-            const notesLines = doc.splitTextToSize(`Notes: ${facture.notes}`, 170);
-            notesLines.forEach((line, index) => {
-                doc.text(line, 20, yPosition + (index * 4));
-            });
-        }
 
         // PIED DE PAGE AMÉLIORÉ
         const pageHeight = doc.internal.pageSize.height;
@@ -727,7 +729,7 @@ function Facturation() {
                 doc.text('Tél: +212 661-638266 | E-mail: ars.distribution1@gmail.com', 105, pageHeight - 19, { align: 'center' });
                 doc.text('R.C : 518669 - Patente : 31302654 - I.F : 50575265 - C.N.S.S : 4355737 - ICE : 002910748000077', 105, pageHeight - 15, { align: 'center' });
             } else {
-                doc.text('ARN LOGISTIQUE - 228, bd Mohamed V 7ème étage Bureau 200 Casablanca', 105, pageHeight - 23, { align: 'center' });
+                doc.text('ARN LOGISTIC - 228, bd Mohamed V 7ème étage Bureau 200 Casablanca', 105, pageHeight - 23, { align: 'center' });
                 doc.text('Tél: +212 661-638266 | E-mail: adli.rachid@homail.fr', 105, pageHeight - 19, { align: 'center' });
                 doc.text('R.C 253799 - Patente 32190745 - I.F : 40467063 - C.N.S.S. 9029390 - ICE 000062536000007', 105, pageHeight - 15, { align: 'center' });
             }

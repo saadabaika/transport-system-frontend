@@ -1,4 +1,4 @@
-import React, { useState, useEffect , useRef} from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Container, Table, Button, Spinner, Alert,
     Form, Row, Col, Card, Badge, Modal
@@ -14,6 +14,26 @@ import {
 
 function Trajets() {
     const formRef = useRef(null);
+    // Fonction pour obtenir le mois en cours (du 1er au dernier jour)
+    const getCurrentMonthRange = () => {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+        // Formater les dates en YYYY-MM-DD
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        return {
+            date_debut: formatDate(firstDay),
+            date_fin: formatDate(lastDay)
+        };
+    };
+    const [showFilters, setShowFilters] = useState(false); // Par défaut visible
     const [trajets, setTrajets] = useState([]);
     const [trajetsFiltres, setTrajetsFiltres] = useState([]);
     const [camions, setCamions] = useState([]);
@@ -31,7 +51,8 @@ function Trajets() {
     const [editingTrajet, setEditingTrajet] = useState(null);
 
     const [filtres, setFiltres] = useState({
-        client: '', chauffeur: '', date_debut: '', date_fin: '',
+        client: '', chauffeur: '',
+        ...getCurrentMonthRange(), // ⭐ AJOUTE LE MOIS EN COURS PAR DÉFAUT
         type_trajet: '', type_service: '', type_sous_traitance: '', numero_conteneur: ''
     });
 
@@ -59,6 +80,7 @@ function Trajets() {
 
     useEffect(() => { fetchAllData(); }, []);
     useEffect(() => { appliquerFiltres(); }, [trajets, filtres]);
+
 
     const fetchAllData = async () => {
         try {
@@ -114,7 +136,11 @@ function Trajets() {
     };
 
     const reinitialiserFiltres = () => {
-        setFiltres({ client: '', chauffeur: '', date_debut: '', date_fin: '', type_trajet: '', type_service: '', type_sous_traitance: '', numero_conteneur: '' });
+        setFiltres({
+            client: '', chauffeur: '',
+            ...getCurrentMonthRange(), // ⭐ REMET LE MOIS EN COURS
+            type_trajet: '', type_service: '', type_sous_traitance: '', numero_conteneur: ''
+        });
     };
 
     const handleShowDetails = (trajet) => {
@@ -154,13 +180,13 @@ function Trajets() {
         setNouveauFrais({ nom: '', montant: '' });
         setError('');
         setShowForm(true);
-    // ⭐ AJOUTEZ CE CODE POUR LE DÉFILEMENT AUTOMATIQUE
-    setTimeout(() => {
-        formRef.current?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-        });
-    }, 100);
+        // ⭐ AJOUTEZ CE CODE POUR LE DÉFILEMENT AUTOMATIQUE
+        setTimeout(() => {
+            formRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }, 100);
 
     };
 
@@ -365,71 +391,123 @@ function Trajets() {
         <Container fluid className="px-4 py-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h1>Gestion des Trajets</h1>
-                <Button variant="primary" onClick={() => handleShowForm()} disabled={showForm}>
-                    + Nouveau Trajet
-                </Button>
+                <div className="d-flex gap-2">
+                    <Button
+                        variant={showFilters ? "outline-secondary" : "outline-primary"}
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        {showFilters ? "✖ Masquer Filtres" : "🔍 Filtres"}
+                    </Button>
+                    <Button variant="primary" onClick={() => handleShowForm()} disabled={showForm}>
+                        + Nouveau Trajet
+                    </Button>
+                </div>
             </div>
 
             {error && <Alert variant="danger" onClose={() => setError('')} dismissible>{error}</Alert>}
+            {/* Section Filtres - Masquée par défaut */}
+            {showFilters && (
+                <Card className="mb-4">
+                    <Card.Header className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0">🔍 Filtres de Recherche</h5>
 
-            <Card className="mb-4">
-                <Card.Header><h5 className="mb-0">🔍 Filtres de Recherche</h5></Card.Header>
-                <Card.Body>
-                    <Row>
-                        <Col md={3}><Form.Group className="mb-3"><Form.Label>Client</Form.Label>
-                            <Form.Select name="client" value={filtres.client} onChange={handleFiltreChange}>
-                                <option value="">Tous les clients</option>
-                                {clients.map(client => <option key={client.id} value={client.id}>{client.nom}</option>)}
-                            </Form.Select></Form.Group></Col>
-                        <Col md={2}><Form.Group className="mb-3"><Form.Label>Chauffeur</Form.Label>
-                            <Form.Select name="chauffeur" value={filtres.chauffeur} onChange={handleFiltreChange}>
-                                <option value="">Tous les chauffeurs</option>
-                                {chauffeurs.map(chauffeur => <option key={chauffeur.id} value={chauffeur.id}>{chauffeur.prenom} {chauffeur.nom}</option>)}
-                            </Form.Select></Form.Group></Col>
-                        <Col md={2}><Form.Group className="mb-3"><Form.Label>Date Début</Form.Label>
-                            <Form.Control type="date" name="date_debut" value={filtres.date_debut} onChange={handleFiltreChange} /></Form.Group></Col>
-                        <Col md={2}><Form.Group className="mb-3"><Form.Label>Date Fin</Form.Label>
-                            <Form.Control type="date" name="date_fin" value={filtres.date_fin} onChange={handleFiltreChange} /></Form.Group></Col>
-                        <Col md={3}>
-                            <Form.Group className="mb-3">
-                                <Form.Label>Numéro Conteneur</Form.Label>
-                                <Form.Control
-                                    type="text"
-                                    name="numero_conteneur"
-                                    value={filtres.numero_conteneur}
-                                    onChange={handleFiltreChange}
-                                    placeholder="Rechercher par numéro..."
-                                />
-                            </Form.Group>
-                        </Col>
-                    </Row>
-                    <Row>
-                        <Col md={3}><Form.Group className="mb-3"><Form.Label>Sous-traitance</Form.Label>
-                            <Form.Select name="type_sous_traitance" value={filtres.type_sous_traitance} onChange={handleFiltreChange}>
-                                <option value="">Tous</option>
-                                <option value="interne">Interne</option>
-                                <option value="je_donne">Je donne</option>
-                                <option value="je_recois">Je reçois</option>
-                            </Form.Select></Form.Group></Col>
-                        <Col md={3}><Form.Group className="mb-3"><Form.Label>Type Trajet</Form.Label>
-                            <Form.Select name="type_trajet" value={filtres.type_trajet} onChange={handleFiltreChange}>
-                                <option value="">Tous</option>
-                                <option value="facture">Facturé</option>
-                                <option value="non_facture">Non Facturé</option>
-                            </Form.Select></Form.Group></Col>
-                        <Col md={3}><Form.Group className="mb-3"><Form.Label>Type Service</Form.Label>
-                            <Form.Select name="type_service" value={filtres.type_service} onChange={handleFiltreChange}>
-                                <option value="">Tous</option>
-                                <option value="ars_distribution">ARS Distribution</option>
-                                <option value="arn_logistique">ARN Logistique</option>
-                            </Form.Select></Form.Group></Col>
-                        <Col md={3} className="d-flex align-items-end">
-                            <Button variant="outline-secondary" onClick={reinitialiserFiltres}>🔄 Réinitialiser</Button>
-                            <div className="ms-2 text-muted"><small>{trajetsFiltres.length} trajet(s) trouvé(s)</small></div>
-                        </Col>
-                    </Row>
-                </Card.Body>
-            </Card>
+                    </Card.Header>
+                    <Card.Body>
+                        <Row>
+                            <Col md={3}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Client</Form.Label>
+                                    <Form.Select name="client" value={filtres.client} onChange={handleFiltreChange}>
+                                        <option value="">Tous les clients</option>
+                                        {clients.map(client => <option key={client.id} value={client.id}>{client.nom}</option>)}
+                                    </Form.Select>
+                                </Form.Group>
+                            </Col>
+                            <Col md={2}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Chauffeur</Form.Label>
+                                    <Form.Select name="chauffeur" value={filtres.chauffeur} onChange={handleFiltreChange}>
+                                        <option value="">Tous les chauffeurs</option>
+                                        {chauffeurs.map(chauffeur => <option key={chauffeur.id} value={chauffeur.id}>{chauffeur.prenom} {chauffeur.nom}</option>)}
+                                    </Form.Select>
+                                </Form.Group>
+                            </Col>
+                            <Col md={2}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Date Début</Form.Label>
+                                    <Form.Control type="date" name="date_debut" value={filtres.date_debut} onChange={handleFiltreChange} />
+                                </Form.Group>
+                            </Col>
+                            <Col md={2}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Date Fin</Form.Label>
+                                    <Form.Control type="date" name="date_fin" value={filtres.date_fin} onChange={handleFiltreChange} />
+                                </Form.Group>
+                            </Col>
+                            <Col md={3}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Numéro Conteneur</Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        name="numero_conteneur"
+                                        value={filtres.numero_conteneur}
+                                        onChange={handleFiltreChange}
+                                        placeholder="Rechercher par numéro..."
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
+                        <Row>
+                            <Col md={3}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Sous-traitance</Form.Label>
+                                    <Form.Select name="type_sous_traitance" value={filtres.type_sous_traitance} onChange={handleFiltreChange}>
+                                        <option value="">Tous</option>
+                                        <option value="interne">Interne</option>
+                                        <option value="je_donne">Je donne</option>
+                                        <option value="je_recois">Je reçois</option>
+                                    </Form.Select>
+                                </Form.Group>
+                            </Col>
+                            <Col md={3}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Type Trajet</Form.Label>
+                                    <Form.Select name="type_trajet" value={filtres.type_trajet} onChange={handleFiltreChange}>
+                                        <option value="">Tous</option>
+                                        <option value="facture">Facturé</option>
+                                        <option value="non_facture">Non Facturé</option>
+                                    </Form.Select>
+                                </Form.Group>
+                            </Col>
+                            <Col md={3}>
+                                <Form.Group className="mb-3">
+                                    <Form.Label>Type Service</Form.Label>
+                                    <Form.Select name="type_service" value={filtres.type_service} onChange={handleFiltreChange}>
+                                        <option value="">Tous</option>
+                                        <option value="ars_distribution">ARS Distribution</option>
+                                        <option value="arn_logistique">ARN Logistique</option>
+                                    </Form.Select>
+                                </Form.Group>
+                            </Col>
+                            <Col md={3} className="d-flex align-items-end gap-2">
+                                <Button variant="outline-secondary" onClick={reinitialiserFiltres}>
+                                    🔄 Réinitialiser
+                                </Button>
+                                <Button
+                                    variant="outline-info"
+                                    onClick={() => setFiltres(prev => ({ ...prev, ...getCurrentMonthRange() }))}
+                                    title="Retour au mois en cours"
+                                >
+                                    📅 Mois actuel
+                                </Button>
+                            </Col>
+                        </Row>
+
+                        {/* Aperçu des filtres actifs */}
+
+                    </Card.Body>
+                </Card>
+            )}
 
             {showForm && (
                 <Card className="mb-4" ref={formRef}>
@@ -783,7 +861,7 @@ function Trajets() {
                                 )}
                                 <hr />
                                 <h6 className="text-success">
-                                    <strong>Total: {calculerTotalAffichage(trajetSelectionne).toLocaleString()} DH</strong>
+                                    <strong>Total: {parseFloat(trajetSelectionne.prix_trajet).toLocaleString()} DH</strong>
                                 </h6>
                             </Card.Body></Card></Col>
                         </Row>

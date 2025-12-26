@@ -9,6 +9,7 @@ const Login = () => {
     const [error, setError] = useState('');
     const [showTestAccounts, setShowTestAccounts] = useState(false);
     const { login, isAuthenticated } = useAuth(); // ⭐ AJOUT de isAuthenticated
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     // ⭐ NOUVEAU : Rediriger si déjà connecté
@@ -79,18 +80,40 @@ const Login = () => {
                                         size="lg"
                                     />
                                 </Form.Group>
-
                                 <Form.Group className="mb-4">
                                     <Form.Label className="fw-medium">Mot de passe</Form.Label>
-                                    <Form.Control
-                                        type="password"
-                                        value={credentials.password}
-                                        onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
-                                        placeholder="Votre mot de passe"
-                                        required
-                                        disabled={loading}
-                                        size="lg"
-                                    />
+                                    <div className="position-relative">
+                                        <Form.Control
+                                            type={showPassword ? "text" : "password"}
+                                            value={credentials.password}
+                                            onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
+                                            placeholder="Votre mot de passe"
+                                            required
+                                            disabled={loading}
+                                            size="lg"
+                                            className="pe-5"
+                                        />
+                                        <div
+                                            className="position-absolute end-0 top-50 translate-middle-y me-3"
+                                            style={{
+                                                cursor: 'pointer',
+                                                color: '#6c757d',
+                                                zIndex: 10,
+                                                transform: 'translateY(-50%)',
+                                                backgroundColor: 'white', // Fond blanc
+                                                padding: '2px 5px',
+                                                borderRadius: '3px',
+                                                border: '1px solid #dee2e6'
+                                            }}
+                                            onClick={() => setShowPassword(!showPassword)}
+                                        >
+                                            {showPassword ? (
+                                                <i className="bi bi-eye-slash" style={{ fontSize: '1.2rem' }}></i>
+                                            ) : (
+                                                <i className="bi bi-eye" style={{ fontSize: '1.2rem' }}></i>
+                                            )}
+                                        </div>
+                                    </div>
                                 </Form.Group>
 
                                 <Button

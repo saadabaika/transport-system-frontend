@@ -9,9 +9,15 @@ import { camionService, chargeCamionService } from '../services/api';
 function StatistiquesCamions() {
     const [statistiques, setStatistiques] = useState(null);
     const [loading, setLoading] = useState(false);
+
+    // ✅ Obtenir la date actuelle
+    const dateActuelle = new Date();
+    const anneeActuelle = dateActuelle.getFullYear();
+    const moisActuel = dateActuelle.getMonth() + 1;
+
     const [filters, setFilters] = useState({
-        annee: new Date().getFullYear(),
-        mois: new Date().getMonth() + 1, // ⭐ MOIS ACTUEL
+        annee: anneeActuelle,
+        mois: moisActuel, // ✅ MOIS ACTUEL (1-12)
         type_charge: '',
         categorie: ''
     });
@@ -19,9 +25,12 @@ function StatistiquesCamions() {
     const fetchStatistiques = async () => {
         setLoading(true);
         try {
+            // ✅ Si mois est 0 (après parseInt de ""), envoyer null pour tous les mois
+            const moisPourAPI = filters.mois === 0 ? null : filters.mois;
+
             const response = await chargeCamionService.getStatistiquesCamions(
                 filters.annee,
-                filters.mois,
+                moisPourAPI,
                 filters.type_charge,
                 filters.categorie
             );
@@ -44,14 +53,10 @@ function StatistiquesCamions() {
         }));
     };
 
-    const handleSubmitFilters = (e) => {
-        e.preventDefault();
-        fetchStatistiques();
-    };
-
-    // ⭐ FONCTION POUR AVOIR LE NOM DU MOIS
-
+    // ✅ FONCTION POUR AVOIR LE NOM DU MOIS
     const getMoisNom = (mois) => {
+        if (mois === 0 || mois === "" || mois === null) return "Tous les mois";
+
         const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
         return moisNoms[mois - 1] || '';
@@ -63,8 +68,8 @@ function StatistiquesCamions() {
                 <h5>📊 Statistiques Globales des Camions</h5>
             </Card.Header>
             <Card.Body>
-                {/* Filtres - MAINTENANT AUTOMATIQUES */}
-                <Form onSubmit={handleSubmitFilters}>
+                {/* Filtres */}
+                <Form>
                     <Row className="mb-3">
                         <Col md={3}>
                             <Form.Group>
@@ -84,9 +89,14 @@ function StatistiquesCamions() {
                                 <Form.Label>Mois</Form.Label>
                                 <Form.Select
                                     value={filters.mois}
-                                    onChange={(e) => handleFilterChange('mois', parseInt(e.target.value))}
+                                    onChange={(e) => {
+                                        const valeur = e.target.value;
+                                        // ✅ Convertir "" en 0 pour "Tous les mois"
+                                        handleFilterChange('mois', valeur === "" ? 0 : parseInt(valeur));
+                                    }}
                                 >
-                                    <option value="">Tous les mois</option>
+                                    {/* ✅ IMPORTANT: value="0" pour "Tous les mois" */}
+                                    <option value="0">Tous les mois</option>
                                     {Array.from({ length: 12 }, (_, i) => i + 1).map(mois => (
                                         <option key={mois} value={mois}>
                                             {getMoisNom(mois)}
@@ -127,12 +137,24 @@ function StatistiquesCamions() {
                     </Row>
                     <Row>
                         <Col md={12} className="d-flex justify-content-between align-items-center">
-                            {/* ⭐ BOUTON OPTIONNEL - Peut être supprimé */}
-                            <Button type="submit" variant="primary">
-                                🔍 Actualiser
+                            {/* ✅ Bouton pour réinitialiser au mois en cours */}
+                            <Button
+                                variant="outline-primary"
+                                onClick={() => {
+                                    const aujourdhui = new Date();
+                                    setFilters({
+                                        ...filters,
+                                        annee: aujourdhui.getFullYear(),
+                                        mois: aujourdhui.getMonth() + 1
+                                    });
+                                }}
+                            >
+                                📅 Retour au mois en cours
                             </Button>
-                            <Badge bg="info">
-                                Période: {getMoisNom(filters.mois)} {filters.annee}
+
+                            {/* ✅ Affichage de la période */}
+                            <Badge bg={filters.mois === 0 ? "secondary" : "primary"}>
+                                {getMoisNom(filters.mois)} {filters.annee}
                             </Badge>
                         </Col>
                     </Row>
@@ -152,6 +174,12 @@ function StatistiquesCamions() {
                                     <Card.Body>
                                         <Card.Title>Total Global</Card.Title>
                                         <h4>{statistiques.stats_globales.total_global.toFixed(2)} DH</h4>
+                                        <small className="opacity-75">
+                                            {filters.mois === 0
+                                                ? "Tous les mois"
+                                                : getMoisNom(filters.mois)
+                                            }
+                                        </small>
                                     </Card.Body>
                                 </Card>
                             </Col>
@@ -160,6 +188,12 @@ function StatistiquesCamions() {
                                     <Card.Body>
                                         <Card.Title>Nombre de Charges</Card.Title>
                                         <h4>{statistiques.stats_globales.nombre_charges_global}</h4>
+                                        <small className="opacity-75">
+                                            {filters.type_charge
+                                                ? `Type: ${filters.type_charge}`
+                                                : 'Tous types'
+                                            }
+                                        </small>
                                     </Card.Body>
                                 </Card>
                             </Col>
@@ -223,6 +257,7 @@ function StatistiquesCamions() {
                 ) : (
                     <div className="text-center text-muted">
                         <p>Aucune donnée statistique disponible</p>
+                        <small>Pour {getMoisNom(filters.mois)} {filters.annee}</small>
                     </div>
                 )}
             </Card.Body>

@@ -214,6 +214,19 @@ function FraisChauffeurs() {
         const primaryColor = [41, 128, 185];
         const darkColor = [52, 73, 94];
 
+        // ✅ CORRECTION : Fonction pour formater les montants sans slash
+        const formatMontant = (nombre) => {
+            const valeur = parseFloat(nombre || 0);
+            const parties = valeur.toFixed(2).split('.');
+            let partieEntiere = parties[0];
+            const partieDecimale = parties[1];
+
+            // Ajouter des points comme séparateurs de milliers
+            partieEntiere = partieEntiere.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+            return `${partieEntiere},${partieDecimale}`;
+        };
+
         // Fonction pour créer l'en-tête sur une page
         const createHeader = (startY) => {
             // En-tête avec logo
@@ -236,9 +249,6 @@ function FraisChauffeurs() {
             // Informations chauffeur
             doc.setFontSize(14);
             doc.text(`Chauffeur : ${chauffeurRapport.prenom} ${chauffeurRapport.nom}`, 14, startY + 35);
-
-            // Camion (si disponible)
-
 
             return startY + 50; // Retourne la position Y de départ après l'en-tête
         };
@@ -272,8 +282,9 @@ function FraisChauffeurs() {
                 trajet.client_details?.nom || 'N/A',
                 trajet.numeros_conteneurs || '-',
                 trajet.destination_details?.ville || 'N/A',
-                `${fraisChauffeur.toLocaleString('fr-FR')} DH`,
-                `${autresFrais.toLocaleString('fr-FR')} DH`,
+                // ✅ CORRECTION : Utiliser formatMontant au lieu de toLocaleString
+                `${formatMontant(fraisChauffeur)} DH`,
+                `${formatMontant(autresFrais)} DH`,
                 getStatutText(trajet.statut_paiement_frais)
             ];
         });
@@ -316,10 +327,19 @@ function FraisChauffeurs() {
         };
 
         // Générer le tableau
-        autoTable(doc, tableConfig);
+        if (typeof autoTable !== 'undefined') {
+            autoTable(doc, tableConfig);
+        } else {
+            console.error('autoTable n\'est pas défini');
+            // Alternative manuelle si autoTable n'est pas disponible
+        }
 
         // Récupérer la position finale après le tableau
-        startY = doc.lastAutoTable.finalY + 10;
+        let finalY = startY + (trajetsChauffeur.length * 6) + 30; // Estimation si autoTable échoue
+        if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
+            finalY = doc.lastAutoTable.finalY;
+        }
+        startY = finalY + 10;
 
         // Vérifier si on a assez d'espace pour les totaux, sinon nouvelle page
         if (startY > 200) {
@@ -345,13 +365,17 @@ function FraisChauffeurs() {
 
         doc.setTextColor(0, 0, 0);
         doc.setFont(undefined, 'normal');
-        doc.text(`${totalFraisChauffeur.toLocaleString('fr-FR')} DH`, 70, startY + 12);
-        doc.text(`${totalAutresFrais.toLocaleString('fr-FR')} DH`, 65, startY + 19);
+
+        // ✅ CORRECTION : Utiliser formatMontant au lieu de toLocaleString
+        doc.text(`${formatMontant(totalFraisChauffeur)} DH`, 70, startY + 12);
+        doc.text(`${formatMontant(totalAutresFrais)} DH`, 65, startY + 19);
 
         doc.setFontSize(13);
         doc.setFont(undefined, 'bold');
         doc.setTextColor(46, 204, 113); // Vert
-        doc.text(`TOTAL : ${totalGeneral.toLocaleString('fr-FR')} DH`, 15, startY + 27);
+
+        // ✅ CORRECTION : Utiliser formatMontant au lieu de toLocaleString
+        doc.text(`TOTAL : ${formatMontant(totalGeneral)} DH`, 15, startY + 27);
 
         startY += 45;
 
@@ -360,8 +384,8 @@ function FraisChauffeurs() {
             startY = addNewPageWithHeader();
         }
 
-        // Déclaration du chauffeur
-        const declarationText = `Je soussigné, ${chauffeurRapport.prenom} ${chauffeurRapport.nom}, reconnais avoir reçu et encaissé la somme de ${totalGeneral.toLocaleString('fr-FR')} DH en règlement de tous mes frais afférents à mes missions de transport pour la période du ${rapportDates.date_debut} au ${rapportDates.date_fin}.`;
+        // ✅ CORRECTION : Utiliser formatMontant dans la déclaration
+        const declarationText = `Je soussigné, ${chauffeurRapport.prenom} ${chauffeurRapport.nom}, reconnais avoir reçu et encaissé la somme de ${formatMontant(totalGeneral)} DH en règlement de tous mes frais afférents à mes missions de transport pour la période du ${rapportDates.date_debut} au ${rapportDates.date_fin}.`;
 
         const declarationLines = doc.splitTextToSize(declarationText, 180);
         doc.setFontSize(9);

@@ -23,6 +23,7 @@ function Clients() {
     const [clients, setClients] = useState([]);
     const [trajets, setTrajets] = useState([]);
     const [trajetsFiltres, setTrajetsFiltres] = useState([]);
+    const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -30,6 +31,38 @@ function Clients() {
     const [showDetails, setShowDetails] = useState(false);
     const [clientSelectionne, setClientSelectionne] = useState(null);
     const [editingClient, setEditingClient] = useState(null);
+    // Fonction de tri optimisée pour le français
+
+    const trierClientsFrancais = (clients) => {
+        return clients.slice().sort((a, b) =>
+            a.nom.localeCompare(b.nom, 'fr', {
+                sensitivity: 'base',
+                ignorePunctuation: true,
+                numeric: true
+            })
+        );
+    };
+    // Ajoutez cette fonction après vos autres fonctions
+    // Fonction pour filtrer et trier les clients
+    const getClientsFiltres = () => {
+        let clientsFiltres = [...clients];
+
+        // Appliquer la recherche si un terme est saisi
+        if (searchTerm.trim()) {
+            const terme = searchTerm.toLowerCase();
+            clientsFiltres = clientsFiltres.filter(client =>
+                client.nom.toLowerCase().includes(terme) ||
+                (client.ice && client.ice.toLowerCase().includes(terme)) ||
+                (client.email && client.email.toLowerCase().includes(terme)) ||
+                (client.telephone && client.telephone.includes(terme))
+            );
+        }
+
+        // Trier par ordre alphabétique
+        return clientsFiltres.sort((a, b) =>
+            a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })
+        );
+    };
 
     // États pour les filtres des trajets
     const [filtresTrajets, setFiltresTrajets] = useState({
@@ -422,6 +455,53 @@ function Clients() {
                     {error}
                 </Alert>
             )}
+            {/* Barre de recherche */}
+            <Card className="mb-4 shadow-sm">
+                <Card.Body className="py-3">
+                    <Row className="align-items-center">
+                        <Col md={8} lg={9}>
+                            <div className="input-group">
+                                <span className="input-group-text bg-white border-end-0">
+                                    <i className="bi bi-search text-muted"></i>
+                                </span>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Rechercher un client par nom, ICE, email ou téléphone..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="border-start-0"
+                                />
+                                {searchTerm && (
+                                    <Button
+                                        variant="outline-secondary"
+                                        onClick={() => setSearchTerm('')}
+                                        className="border-start-0"
+                                    >
+                                        <i className="bi bi-x"></i>
+                                    </Button>
+                                )}
+                            </div>
+                        </Col>
+                        <Col md={4} lg={3} className="mt-3 mt-md-0">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <Badge bg="light" text="dark" className="px-3 py-2">
+                                    {getClientsFiltres().length} client(s)
+                                </Badge>
+                                {searchTerm && (
+                                    <Button
+                                        variant="link"
+                                        size="sm"
+                                        onClick={() => setSearchTerm('')}
+                                        className="text-decoration-none"
+                                    >
+                                        Effacer
+                                    </Button>
+                                )}
+                            </div>
+                        </Col>
+                    </Row>
+                </Card.Body>
+            </Card>
 
             {/* Formulaire inline */}
             {showForm && (
@@ -545,7 +625,8 @@ function Clients() {
                             </tr>
                         </thead>
                         <tbody>
-                            {clients.map((client) => {
+
+                        {getClientsFiltres().map((client) => {
                                 const stats = getStatsClient(client.id);
                                 return (
                                     <tr key={client.id}>

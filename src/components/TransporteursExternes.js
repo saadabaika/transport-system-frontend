@@ -350,7 +350,17 @@ function TransporteursExternes() {
         const warningColor = [243, 156, 18];
         const grayColor = [149, 165, 166];
 
-        // En-tête avec style amélioré
+        // Fonction pour formater les nombres
+        const formatMontant = (nombre) => {
+            const valeur = parseFloat(nombre || 0);
+            const parties = valeur.toFixed(2).split('.');
+            let partieEntiere = parties[0];
+            const partieDecimale = parties[1];
+            partieEntiere = partieEntiere.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return `${partieEntiere},${partieDecimale}`;
+        };
+
+        // En-tête
         doc.setFillColor(...primaryColor);
         doc.rect(0, 0, pageWidth, 40, 'F');
 
@@ -370,19 +380,30 @@ function TransporteursExternes() {
 
         yPosition = 50;
 
-        // Statistiques
-        const trajetsJeDonne = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_donne');
-        const trajetsJeRecois = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_recois');
+        // ✅ CORRECTION ICI : Séparer l'affichage et le calcul
+        // Pour l'affichage dans les tableaux : TOUS les trajets
+        const trajetsJeDonnePourAffichage = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_donne');
+        const trajetsJeRecoisPourAffichage = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_recois');
 
-        const totalJeDonne = trajetsJeDonne.reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0);
-        const totalJeRecois = trajetsJeRecois.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0);
+        // ✅ CORRECTION ICI : Pour le calcul : SEULEMENT les non payés
+        const trajetsJeDonnePourCalcul = trajetsTransporteur.filter(t =>
+            t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye'
+        );
+
+        const trajetsJeRecoisPourCalcul = trajetsTransporteur.filter(t =>
+            t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye'
+        );
+
+        // Calculer les totaux SEULEMENT pour les trajets non payés
+        const totalJeDonne = trajetsJeDonnePourCalcul.reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0);
+        const totalJeRecois = trajetsJeRecoisPourCalcul.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0);
         const soldeNet = totalJeRecois - totalJeDonne;
 
         yPosition += 25;
 
-        // Tableau des trajets "Je donne"
-        if (trajetsJeDonne.length > 0) {
-            const hauteurTableauJeDonne = 12 + (trajetsJeDonne.length * 10) + 20;
+        // Tableau des trajets "Je donne" - Afficher TOUS
+        if (trajetsJeDonnePourAffichage.length > 0) {
+            const hauteurTableauJeDonne = 12 + (trajetsJeDonnePourAffichage.length * 10) + 20;
             if (yPosition + hauteurTableauJeDonne > 260) {
                 doc.addPage();
                 yPosition = margin;
@@ -419,7 +440,8 @@ function TransporteursExternes() {
             doc.setTextColor(0, 0, 0);
             doc.setFont(undefined, 'normal');
 
-            trajetsJeDonne.forEach((trajet, index) => {
+            // ✅ Afficher TOUS les trajets
+            trajetsJeDonnePourAffichage.forEach((trajet, index) => {
                 if (yPosition > 260) {
                     doc.addPage();
                     yPosition = margin;
@@ -465,7 +487,7 @@ function TransporteursExternes() {
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);
                 xPos += colWidthsJeDonne[3];
                 doc.setFont(undefined, 'bold');
-                doc.text(`${parseFloat(trajet.prix_sous_traitance || 0).toLocaleString()} DH`, xPos, yPosition + 6);
+                doc.text(`${formatMontant(trajet.prix_sous_traitance || 0)} DH`, xPos, yPosition + 6);
                 doc.setFont(undefined, 'normal');
                 xPos += colWidthsJeDonne[4];
                 const statutPaiement = trajet.statut_paiement_sous_traitance || 'non_paye';
@@ -490,9 +512,9 @@ function TransporteursExternes() {
             yPosition += 20;
         }
 
-        // Tableau des trajets "Je reçois"
-        if (trajetsJeRecois.length > 0) {
-            const hauteurTableauJeRecois = 12 + (trajetsJeRecois.length * 10) + 20;
+        // Tableau des trajets "Je reçois" - Afficher TOUS
+        if (trajetsJeRecoisPourAffichage.length > 0) {
+            const hauteurTableauJeRecois = 12 + (trajetsJeRecoisPourAffichage.length * 10) + 20;
             if (yPosition + hauteurTableauJeRecois > 260) {
                 doc.addPage();
                 yPosition = margin;
@@ -529,7 +551,8 @@ function TransporteursExternes() {
             doc.setTextColor(0, 0, 0);
             doc.setFont(undefined, 'normal');
 
-            trajetsJeRecois.forEach((trajet, index) => {
+            // ✅ Afficher TOUS les trajets
+            trajetsJeRecoisPourAffichage.forEach((trajet, index) => {
                 if (yPosition > 260) {
                     doc.addPage();
                     yPosition = margin;
@@ -575,7 +598,7 @@ function TransporteursExternes() {
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);
                 xPos += colWidthsJeRecois[3];
                 doc.setFont(undefined, 'bold');
-                doc.text(`${parseFloat(trajet.prix_trajet || 0).toLocaleString()} DH`, xPos, yPosition + 6);
+                doc.text(`${formatMontant(trajet.prix_trajet || 0)} DH`, xPos, yPosition + 6);
                 doc.setFont(undefined, 'normal');
                 xPos += colWidthsJeRecois[4];
                 const statutPaiement = trajet.statut_paiement_sous_traitance || 'non_paye';
@@ -615,25 +638,28 @@ function TransporteursExternes() {
 
         doc.setFontSize(11);
         doc.setFont(undefined, 'normal');
-        doc.text(`Total trajets "Je donne": ${trajetsJeDonne.length} trajet${trajetsJeDonne.length > 1 ? 's' : ''}`, margin + 15, yPosition + 28);
-        doc.text(`Total trajets "Je reçois": ${trajetsJeRecois.length} trajet${trajetsJeRecois.length > 1 ? 's' : ''}`, margin + 15, yPosition + 38);
+        doc.text(`Total trajets "Je donne": ${trajetsJeDonnePourAffichage.length} trajet${trajetsJeDonnePourAffichage.length > 1 ? 's' : ''}`, margin + 15, yPosition + 28);
+        doc.text(`Total trajets "Je reçois": ${trajetsJeRecoisPourAffichage.length} trajet${trajetsJeRecoisPourAffichage.length > 1 ? 's' : ''}`, margin + 15, yPosition + 38);
 
         doc.setFont(undefined, 'bold');
-        doc.text(`Total à payer au transporteur: ${totalJeDonne.toLocaleString()} DH`, pageWidth - margin - 10, yPosition + 28, { align: 'right' });
-        doc.text(`Total à recevoir du transporteur: ${totalJeRecois.toLocaleString()} DH`, pageWidth - margin - 10, yPosition + 38, { align: 'right' });
+        // ✅ CORRECTION : Utiliser les totaux CALCULÉS (non payés seulement)
+        doc.text(`Total à payer : ${formatMontant(totalJeDonne)} DH`, pageWidth - margin - 10, yPosition + 28, { align: 'right' });
+        doc.text(`Total à recevoir : ${formatMontant(totalJeRecois)} DH`, pageWidth - margin - 10, yPosition + 38, { align: 'right' });
 
-        yPosition += 85;
+
+        yPosition += 65;
 
         doc.setFontSize(16);
         doc.setFont(undefined, 'bold');
         doc.setFont("helvetica", "bold");
 
+        // ✅ CORRECTION : Afficher le solde basé sur les non payés
         if (soldeNet >= 0) {
             doc.setTextColor(...successColor);
-            doc.text(`SOLDE FINAL À RECEVOIR: ${soldeNet.toLocaleString()} DH`, pageWidth / 2, yPosition, { align: 'center' });
+            doc.text(`SOLDE À RECEVOIR: ${formatMontant(soldeNet)} DH`, pageWidth / 2, yPosition, { align: 'center' });
         } else {
             doc.setTextColor(...dangerColor);
-            doc.text(`SOLDE FINAL À PAYER: ${Math.abs(soldeNet).toLocaleString()} DH`, pageWidth / 2, yPosition, { align: 'center' });
+            doc.text(`SOLDE À PAYER: ${formatMontant(Math.abs(soldeNet))} DH`, pageWidth / 2, yPosition, { align: 'center' });
         }
 
         const pageCount = doc.internal.getNumberOfPages();
@@ -983,13 +1009,50 @@ function TransporteursExternes() {
                         </Card>
 
                         {/* Statistiques */}
+                        {/* Statistiques */}
                         <Row className="mb-4">
                             <Col md={3}>
                                 <Card className="text-center border-warning">
                                     <Card.Body>
                                         <Card.Title>📤 Je donne</Card.Title>
-                                        <h4>{statsTrajets.totalJeDonne}</h4>
-                                        <p className="mb-0">{statsTrajets.montantJeDonne.toLocaleString()} DH</p>
+                                        <h4>{trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_donne').length}</h4>
+                                        <div className="mt-2">
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Payés:</span>
+                                                <span className="small">
+                                                    {trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance === 'paye')
+                                                        .length}
+                                                </span>
+                                            </div>
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Non payés:</span>
+                                                <span className="text-danger small">
+                                                    {trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye')
+                                                        .length}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <hr className="my-2" />
+                                        <div className="d-flex justify-content-between align-items-center">
+                                            <span className="text-muted small">Total:</span>
+                                            <span className="small">
+                                                {trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_donne')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0)
+                                                    .toLocaleString()} DH
+                                            </span>
+                                        </div>
+                                        <div className="d-flex justify-content-between align-items-center mt-1">
+                                            <span className="text-danger small">À payer:</span>
+                                            <span className="text-danger small fw-bold">
+                                                {trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0)
+                                                    .toLocaleString()} DH
+                                            </span>
+                                        </div>
                                     </Card.Body>
                                 </Card>
                             </Col>
@@ -997,19 +1060,90 @@ function TransporteursExternes() {
                                 <Card className="text-center border-info">
                                     <Card.Body>
                                         <Card.Title>📥 Je reçois</Card.Title>
-                                        <h4>{statsTrajets.totalJeRecois}</h4>
-                                        <p className="mb-0">{statsTrajets.montantJeRecois.toLocaleString()} DH</p>
+                                        <h4>{trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_recois').length}</h4>
+                                        <div className="mt-2">
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Payés:</span>
+                                                <span className="small">
+                                                    {trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance === 'paye')
+                                                        .length}
+                                                </span>
+                                            </div>
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Non payés:</span>
+                                                <span className="text-success small">
+                                                    {trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye')
+                                                        .length}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <hr className="my-2" />
+                                        <div className="d-flex justify-content-between align-items-center">
+                                            <span className="text-muted small">Total:</span>
+                                            <span className="small">
+                                                {trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_recois')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
+                                                    .toLocaleString()} DH
+                                            </span>
+                                        </div>
+                                        <div className="d-flex justify-content-between align-items-center mt-1">
+                                            <span className="text-success small">À recevoir:</span>
+                                            <span className="text-success small fw-bold">
+                                                {trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
+                                                    .toLocaleString()} DH
+                                            </span>
+                                        </div>
                                     </Card.Body>
                                 </Card>
                             </Col>
                             <Col md={3}>
                                 <Card className="text-center border-success">
                                     <Card.Body>
-                                        <Card.Title>💰 Solde</Card.Title>
-                                        <h4>{(statsTrajets.montantJeRecois - statsTrajets.montantJeDonne).toLocaleString()} DH</h4>
+                                        <Card.Title>💰 Solde réel</Card.Title>
+                                        <h4>
+                                            {(
+                                                trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
+                                                -
+                                                trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0)
+                                            ).toLocaleString()} DH
+                                        </h4>
                                         <p className="mb-0">
-                                            {statsTrajets.montantJeRecois > statsTrajets.montantJeDonne ? 'À recevoir' : 'À payer'}
+                                            {trajetsTransporteur
+                                                .filter(t => t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye')
+                                                .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
+                                                >
+                                                trajetsTransporteur
+                                                    .filter(t => t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye')
+                                                    .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0)
+                                                ? 'À recevoir' : 'À payer'}
                                         </p>
+                                        <p className="mb-0 text-muted small">
+
+                                        </p>
+                                        <hr className="my-2" />
+                                        <div className="d-flex justify-content-between align-items-center">
+                                            <span className="text-muted small">Solde total:</span>
+                                            <span className="small">
+                                                {(
+                                                    trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_recois')
+                                                        .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
+                                                    -
+                                                    trajetsTransporteur
+                                                        .filter(t => t.type_sous_traitance === 'je_donne')
+                                                        .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0)
+                                                ).toLocaleString()} DH
+                                            </span>
+                                        </div>
                                     </Card.Body>
                                 </Card>
                             </Col>
@@ -1018,7 +1152,28 @@ function TransporteursExternes() {
                                     <Card.Body>
                                         <Card.Title>📋 Total</Card.Title>
                                         <h4>{trajetsTransporteur.length}</h4>
-                                        <p className="mb-0">Trajets</p>
+                                        <div className="mt-2">
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Payés:</span>
+                                                <span className="text-success small">
+                                                    {trajetsTransporteur.filter(t => t.statut_paiement_sous_traitance === 'paye').length}
+                                                </span>
+                                            </div>
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Non payés:</span>
+                                                <span className="text-warning small">
+                                                    {trajetsTransporteur.filter(t => t.statut_paiement_sous_traitance === 'non_paye').length}
+                                                </span>
+                                            </div>
+                                            <div className="d-flex justify-content-between">
+                                                <span className="text-muted small">Partiels:</span>
+                                                <span className="text-info small">
+                                                    {trajetsTransporteur.filter(t => t.statut_paiement_sous_traitance === 'partiel').length}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <hr className="my-2" />
+                                        <p className="mb-0 text-muted small">Trajets</p>
                                     </Card.Body>
                                 </Card>
                             </Col>
