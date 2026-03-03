@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Container, Table, Button, Spinner, Alert,
     Form, Row, Col, Card, Badge, Modal
@@ -9,7 +9,91 @@ import 'jspdf-autotable';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../context/AuthContext'; // ⭐ AJOUT
 
+const styles = `
+    .btn-action {
+        transition: all 0.2s ease;
+        border: 1px solid #dee2e6;
+    }
 
+    .btn-action.details {
+        color: #17a2b8;
+        border-color: #17a2b8;
+    }
+
+    .btn-action.details:hover {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .btn-action.menu {
+        color: #6c757d;
+        border-color: #6c757d;
+    }
+
+    .btn-action.menu:hover {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .action-icon {
+        font-size: 0.9rem;
+    }
+
+    .action-menu-dropdown {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        z-index: 1000;
+        min-width: 150px;
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .menu-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+        font-size: 14px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .menu-item:hover {
+        background-color: #f8f9fa;
+    }
+
+    .menu-item.modifier {
+        color: #007bff;
+    }
+
+    .menu-item.supprimer {
+        color: #dc3545;
+    }
+
+    .menu-item i {
+        font-size: 1rem;
+    }
+
+    .menu-divider {
+        margin: 4px 0;
+        border-top: 1px solid #dee2e6;
+    }
+`;
 function Clients() {
     const { hasAccess, isFacturation } = useAuth(); // ⭐ AJOUT
 
@@ -31,8 +115,32 @@ function Clients() {
     const [showDetails, setShowDetails] = useState(false);
     const [clientSelectionne, setClientSelectionne] = useState(null);
     const [editingClient, setEditingClient] = useState(null);
+    const [showActionsMenu, setShowActionsMenu] = useState(null);
+    const [menuPositions, setMenuPositions] = useState({}); // ⭐ AJOUTER CETTE LIGNE
     // Fonction de tri optimisée pour le français
+    // ⭐ FONCTION POUR GÉRER L'OUVERTURE DU MENU AVEC DÉTECTION DE POSITION
+    const handleMenuOpen = (clientId, event) => {
+        event.stopPropagation();
 
+        if (showActionsMenu === clientId) {
+            setShowActionsMenu(null);
+            return;
+        }
+
+        const button = event.currentTarget;
+        const buttonRect = button.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - buttonRect.bottom;
+        const estimatedMenuHeight = 120;
+
+        const position = spaceBelow < estimatedMenuHeight ? 'top' : 'bottom';
+
+        setMenuPositions(prev => ({
+            ...prev,
+            [clientId]: position
+        }));
+
+        setShowActionsMenu(clientId);
+    };
     const trierClientsFrancais = (clients) => {
         return clients.slice().sort((a, b) =>
             a.nom.localeCompare(b.nom, 'fr', {
@@ -81,6 +189,24 @@ function Clients() {
     useEffect(() => {
         fetchAllData();
     }, []);
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showActionsMenu) {
+                // Vérifier si le clic est à l'intérieur du menu ou du bouton
+                const isInside = event.target.closest('.action-menu-dropdown') || 
+                               event.target.closest('.btn-action.menu');
+                
+                if (!isInside) {
+                    setShowActionsMenu(null);
+                }
+            }
+        };
+    
+        document.addEventListener('click', handleClickOutside);
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [showActionsMenu]);
 
     useEffect(() => {
         if (clientSelectionne) {
@@ -626,7 +752,7 @@ function Clients() {
                         </thead>
                         <tbody>
 
-                        {getClientsFiltres().map((client) => {
+                            {getClientsFiltres().map((client) => {
                                 const stats = getStatsClient(client.id);
                                 return (
                                     <tr key={client.id}>
@@ -652,35 +778,104 @@ function Clients() {
                                         )}
                                         <td>{stats.dernierTrajet}</td>
                                         <td>
-                                            <div className="btn-group" role="group">
+                                            <div className="d-flex gap-2 align-items-center">
+                                                {/* Bouton Voir détails */}
                                                 {canViewClientDetails && canViewClientStats && (
                                                     <Button
                                                         variant="outline-info"
                                                         size="sm"
                                                         onClick={() => handleShowDetails(client)}
+                                                        title="Voir les détails"
+                                                        className="btn-action details d-flex align-items-center gap-1"
                                                     >
-                                                        👁️ Voir
+                                                        <i className="bi bi-eye action-icon"></i>
+                                                        <span className="d-none d-md-inline">Détails</span>
                                                     </Button>
                                                 )}
-                                                {canEditClient && (
-                                                    <Button
-                                                        variant="outline-primary"
-                                                        size="sm"
-                                                        onClick={() => handleShowForm(client)}
-                                                        disabled={showForm}
-                                                    >
-                                                        ✏️
-                                                    </Button>
-                                                )}
-                                                {canDeleteClient && (
-                                                    <Button
-                                                        variant="outline-danger"
-                                                        size="sm"
-                                                        onClick={() => handleDelete(client.id)}
-                                                        disabled={showForm}
-                                                    >
-                                                        🗑️
-                                                    </Button>
+
+                                                {/* Menu déroulant pour Modifier/Supprimer */}
+                                                {(canEditClient || canDeleteClient) && (
+                                                    <div className="position-relative">
+                                                        <Button
+                                                            variant="outline-secondary"
+                                                            size="sm"
+                                                            onClick={(e) => handleMenuOpen(client.id, e)}
+                                                            title="Plus d'actions"
+                                                            className="btn-action menu"
+                                                        >
+                                                            <i className="bi bi-three-dots-vertical action-icon"></i>
+                                                        </Button>
+
+                                                        {/* Menu déroulant */}
+                                                        {showActionsMenu === client.id && (
+                                                            <div
+                                                                className="position-absolute action-menu-dropdown"
+                                                                style={{
+                                                                    top: '100%',
+                                                                    right: '0',
+                                                                    zIndex: 1000,
+                                                                    minWidth: '150px',
+                                                                    backgroundColor: 'white',
+                                                                    border: '1px solid #dee2e6',
+                                                                    borderRadius: '4px',
+                                                                    boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                {/* Option Modifier */}
+                                                                {canEditClient && (
+                                                                    <>
+                                                                        <button
+                                                                            className="menu-item modifier w-100 text-start px-3 py-2 border-0 bg-transparent"
+                                                                            style={{
+                                                                                cursor: 'pointer',
+                                                                                transition: 'background-color 0.2s'
+                                                                            }}
+                                                                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                                                                            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                                                            onClick={(e) => {  // ⭐ AJOUTER e
+                                                                                e.stopPropagation(); // ⭐ AJOUTER CETTE LIGNE
+                                                                                handleShowForm(client);
+                                                                                setShowActionsMenu(null);
+                                                                            }}
+                                                                        >
+                                                                            <i className="bi bi-pencil me-2"></i>
+                                                                            Modifier
+                                                                        </button>
+                                                                    </>
+                                                                )}
+
+                                                                {/* Séparateur si les deux options sont disponibles */}
+                                                                {canEditClient && canDeleteClient && (
+                                                                    <hr className="my-1" />
+                                                                )}
+
+                                                                {/* Option Supprimer */}
+                                                                {canDeleteClient && (
+                                                                    <button
+                                                                        className="menu-item supprimer w-100 text-start px-3 py-2 border-0 bg-transparent"
+                                                                        style={{
+                                                                            cursor: 'pointer',
+                                                                            transition: 'background-color 0.2s',
+                                                                            color: '#dc3545'
+                                                                        }}
+                                                                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                                                                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                                                        onClick={(e) => {  // ⭐ AJOUTER e
+                                                                            e.stopPropagation(); // ⭐ AJOUTER CETTE LIGNE
+                                                                            if (window.confirm(`Êtes-vous sûr de vouloir supprimer le client ${client.nom} ?`)) {
+                                                                                handleDelete(client.id);
+                                                                                setShowActionsMenu(null);
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        <i className="bi bi-trash me-2"></i>
+                                                                        Supprimer
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>

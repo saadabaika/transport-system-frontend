@@ -5,7 +5,7 @@ import {
 } from 'react-bootstrap';
 import {
     camionService, employeService, trajetService, clientService,
-    chargeCamionService, factureService
+    chargeCamionService, factureService, transporteurExterneService
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import jsPDF from 'jspdf';
@@ -211,6 +211,14 @@ const DetailsCamionModal = ({ show, onHide, camion, statistiquesCamion }) => {
                                     <td>Autres charges</td>
                                     <td className="text-end">{statistiquesCamion.charges.autres.toLocaleString()} DH</td>
                                 </tr>
+                                <tr>
+                                    <td>Frais de Déplacement</td>
+                                    <td className="text-end">{statistiquesCamion.charges.deplacement?.toLocaleString() || '0'} DH</td>
+                                </tr>
+                                <tr>
+                                    <td>Frais Supplémentaires</td>
+                                    <td className="text-end">{statistiquesCamion.charges.frais_supplementaires?.toLocaleString() || '0'} DH</td>
+                                </tr>
                                 <tr className="table-warning">
                                     <td><strong>Total des charges</strong></td>
                                     <td className="text-end"><strong>{statistiquesCamion.totalCharges.toLocaleString()} DH</strong></td>
@@ -295,7 +303,11 @@ function Dashboard() {
     const [showDetailsCamion, setShowDetailsCamion] = useState(false);
     const [camionSelectionne, setCamionSelectionne] = useState(null);
     const [statistiquesCamion, setStatistiquesCamion] = useState(null);
-
+    // ⭐ AJOUTEZ CES ÉTATS POUR LES TRANSPORTEURS
+    const [transporteurs, setTransporteurs] = useState([]);
+    const [statistiquesTransporteurs, setStatistiquesTransporteurs] = useState([]);
+    const [loadingTransporteurs, setLoadingTransporteurs] = useState(false);
+    const [trajetsData, setTrajetsData] = useState([]);
     // ⭐ ÉTATS POUR LES FACTURES (AGENT FACTURATION)
     const [factures, setFactures] = useState([]);
     const [clients, setClients] = useState([]);
@@ -338,6 +350,7 @@ function Dashboard() {
     const fetchStats = async () => {
         try {
             setLoading(true);
+            setLoadingTransporteurs(true);
 
             if (isFacturation) {
                 // ⭐ POUR L'AGENT DE FACTURATION : Seulement les données nécessaires
@@ -394,14 +407,14 @@ function Dashboard() {
 
             } else {
                 // ⭐ POUR ADMIN/EMPLOYÉ : Données complètes
-                const [camionsRes, employesRes, trajetsRes, clientsRes, chargesRes, facturesRes] = await Promise.all([
+                const [camionsRes, employesRes, trajetsRes, clientsRes, chargesRes, facturesRes, transporteursRes] = await Promise.all([
                     canAccessCamions ? camionService.getAll() : Promise.resolve({ data: [] }),
                     canAccessEmployes ? employeService.getAll() : Promise.resolve({ data: [] }),
                     trajetService.getAll(),
                     clientService.getAll(),
                     canAccessCamions ? chargeCamionService.getAll() : Promise.resolve({ data: [] }),
-                    factureService.getAll()
-                ]);
+                    factureService.getAll(),
+                    canAccessTransporteurs ? transporteurExterneService.getAll() : Promise.resolve({ data: [] })]);
 
                 const trajets = filtrerTrajetsParDate(trajetsRes.data);
                 const charges = filtrerChargesParDate(chargesRes.data);
@@ -409,11 +422,12 @@ function Dashboard() {
                 const clients = clientsRes.data;
                 const employes = employesRes.data;
                 const factures = facturesRes.data;
+                const transporteurs = transporteursRes.data || [];
 
                 const revenusPeriode = trajets.reduce((total, trajet) =>
                     total + parseFloat(trajet.prix_trajet || 0), 0
                 );
-
+                setTrajetsData(trajets);
                 const statsDetaillees = await calculerStatistiquesDetaillees(trajets, camions, clients, employes, charges, factures);
 
                 setStats({
@@ -427,6 +441,32 @@ function Dashboard() {
                 });
 
                 setStatistiquesDetaillees(statsDetaillees);
+                // ⭐ CALCULER SEULEMENT LE SOLDE DE CHAQUE TRANSPORTEUR
+                // Dans fetchStats, modifiez le calcul du solde réel :
+                const transporteursAvecSolde = transporteurs.map(transporteur => {
+                    const trajetsTransporteur = trajetsRes.data.filter(t => t.transporteur_externe === transporteur.id);
+
+                    if (trajetsTransporteur.length === 0) return null;
+
+                    // SOLDE RÉEL : Seulement les NON PAYÉS
+                    const solde = trajetsTransporteur.reduce((total, trajet) => {
+                        if (trajet.type_sous_traitance === 'je_donne' && trajet.statut_paiement_sous_traitance !== 'paye') {
+                            return total - parseFloat(trajet.prix_sous_traitance || 0);
+                        }
+                        if (trajet.type_sous_traitance === 'je_recois' && trajet.statut_paiement_sous_traitance !== 'paye') {
+                            return total + parseFloat(trajet.prix_trajet || 0);
+                        }
+                        return total;
+                    }, 0);
+
+                    return {
+                        transporteur,
+                        solde,
+                        isSoldePositif: solde >= 0
+                    };
+                }).filter(Boolean);
+
+                setStatistiquesTransporteurs(transporteursAvecSolde);
             }
 
         } catch (error) {
@@ -493,6 +533,13 @@ function Dashboard() {
 
             const totalTrajets = trajetsCamion.length;
             const totalRevenus = trajetsCamion.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0);
+            // ⭐ CALCUL DES FRAIS DE DÉPLACEMENT PAR CAMION
+            const fraisDeplacementCamion = trajetsCamion.reduce((sum, t) =>
+                sum + parseFloat(t.frais_deplacement || 0), 0);
+
+            // ⭐ CALCUL DES FRAIS SUPPLÉMENTAIRES PAR CAMION
+            const fraisSupplementairesCamion = trajetsCamion.reduce((sum, t) =>
+                sum + parseFloat(t.total_frais_supplementaires || 0), 0);
 
             // Calcul des charges par catégorie (uniquement mensuelles)
             const chargesParCategorie = {
@@ -503,7 +550,10 @@ function Dashboard() {
                 jawaz: chargesCamion.filter(c => c.categorie === 'jawaz_autoroute')
                     .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0),
                 autres: chargesCamion.filter(c => ['nettoyage', 'autre'].includes(c.categorie))
-                    .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0)
+                    .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0),
+                // ⭐ AJOUT DES NOUVELLES CATÉGORIES
+                deplacement: trajetsCamion.reduce((sum, t) => sum + parseFloat(t.frais_deplacement || 0), 0),
+                frais_supplementaires: trajetsCamion.reduce((sum, t) => sum + parseFloat(t.total_frais_supplementaires || 0), 0)
             };
 
             const totalCharges = Object.values(chargesParCategorie).reduce((sum, montant) => sum + montant, 0);
@@ -517,10 +567,18 @@ function Dashboard() {
                 revenuMoyen,
                 charges: chargesParCategorie,
                 totalCharges,
-                bilan
+                bilan,
+                // ⭐ AJOUT DES TOTAUX SPÉCIFIQUES POUR AFFICHAGE
+                fraisDeplacementCamion,
+                fraisSupplementairesCamion
             };
         });
+        // ⭐ AJOUT DES TOTAUX GLOBAUX POUR LES FRAIS
+        const totalFraisDeplacementGlobal = trajets.reduce((sum, t) =>
+            sum + parseFloat(t.frais_deplacement || 0), 0);
 
+        const totalFraisSupplementairesGlobal = trajets.reduce((sum, t) =>
+            sum + parseFloat(t.total_frais_supplementaires || 0), 0);
         const camionsPlusActifs = camionsAvecStats
             .sort((a, b) => b.totalTrajets - a.totalTrajets)
             .slice(0, 5);
@@ -577,6 +635,29 @@ function Dashboard() {
         const totalKilometrage = charges
             .filter(c => c.categorie === 'gazoil' && c.kilometrage)
             .reduce((sum, charge) => sum + (parseInt(charge.kilometrage) || 0), 0);
+        // ⭐ AJOUT : Calcul des totaux réels pour le bilan général
+        const totalRevenusReel = trajets.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0);
+        const totalChargesReel = charges.filter(c => c.type_charge === 'mensuelle')
+            .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0);
+        const totalGazoilReel = charges.filter(c => c.categorie === 'gazoil')
+            .reduce((sum, c) => sum + parseFloat(c.montant || 0), 0);
+
+        // ⭐ AJOUT : Calcul du bénéfice/résultat net
+        const resultatNet = totalRevenusReel - totalChargesReel;
+        const margeBrute = totalRevenusReel > 0 ? ((resultatNet / totalRevenusReel) * 100) : 0;
+
+        // ⭐ AJOUT : Calcul des totaux pour la ligne finale
+        const totalTrajetsCamions = camionsAvecStats.reduce((sum, camion) => sum + camion.totalTrajets, 0);
+        const totalRevenusCamions = camionsAvecStats.reduce((sum, camion) => sum + camion.totalRevenus, 0);
+        const totalChargesCamions = camionsAvecStats.reduce((sum, camion) => sum + camion.totalCharges, 0);
+        const totalBilanCamions = camionsAvecStats.reduce((sum, camion) => sum + camion.bilan, 0);
+
+        // ⭐ AJOUT : Calcul de la performance globale
+        const camionsRentables = camionsAvecStats.filter(c => c.bilan >= 0).length;
+        const camionsDeficitaires = camionsAvecStats.filter(c => c.bilan < 0).length;
+        const tauxRentabilite = camionsAvecStats.length > 0 ?
+            (camionsRentables / camionsAvecStats.length) * 100 : 0;
+
 
         return {
             camionsAvecStats,
@@ -592,8 +673,413 @@ function Dashboard() {
             totalTrajets: trajets.length,
             trajetsInterne: trajets.filter(t => t.type_sous_traitance === 'interne').length,
             trajetsJeDonne: trajets.filter(t => t.type_sous_traitance === 'je_donne').length,
-            trajetsJeRecois: trajets.filter(t => t.type_sous_traitance === 'je_recois').length
+            trajetsJeRecois: trajets.filter(t => t.type_sous_traitance === 'je_recois').length,
+            // ⭐ NOUVEAUX TOTAUX POUR LE BILAN GÉNÉRAL
+            totalRevenusReel,
+            totalChargesReel,
+            totalGazoilReel,
+            resultatNet,
+            margeBrute,
+            // ⭐ AJOUT DES NOUVEAUX TOTAUX
+            totalFraisDeplacementGlobal,
+            totalFraisSupplementairesGlobal,
+
+            // ⭐ TOTAUX POUR LA LIGNE FINALE DES CAMIONS
+            totalTrajetsCamions,
+            totalRevenusCamions,
+            totalChargesCamions,
+            totalBilanCamions,
+
+            // ⭐ INDICATEURS DE PERFORMANCE
+            camionsRentables,
+            camionsDeficitaires,
+            tauxRentabilite,
         };
+    };
+    const genererPDFCamions = async () => {
+        setGeneratingPDF(true);
+    
+        try {
+            const { jsPDF } = await import('jspdf');
+            const doc = new jsPDF('landscape');
+    
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const margin = 15;
+            let yPosition = margin;
+    
+            // Couleurs
+            const primaryColor = [13, 110, 253];
+            const successColor = [40, 167, 69];
+            const dangerColor = [220, 53, 69];
+            const warningColor = [255, 193, 7];
+            const grayColor = [108, 117, 125];
+    
+            // === EN-TÊTE ===
+            doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.rect(0, 0, pageWidth, 45, 'F');
+    
+            doc.setFontSize(22);
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.text('RAPPORT DÉTAILLÉ DES CAMIONS', pageWidth / 2, 20, { align: 'center' });
+    
+            doc.setFontSize(11);
+            doc.text(getPeriodeText(), pageWidth / 2, 30, { align: 'center' });
+            doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`, pageWidth / 2, 37, { align: 'center' });
+    
+            yPosition = 50;
+    
+            // === STATISTIQUES RAPIDES ===
+            const statsBoxWidth = (pageWidth - 2 * margin) / 3;
+            const statsBoxHeight = 20;
+    
+            const camionsAffiches = statistiquesDetaillees?.camionsAvecStats || [];
+            const camionsRentables = camionsAffiches.filter(c => c.bilan >= 0).length;
+            const camionsDeficitaires = camionsAffiches.filter(c => c.bilan < 0).length;
+    
+            const statsRapides = [
+                { label: 'Total Camions', value: camionsAffiches.length, color: primaryColor },
+                { label: 'Camions Rentables', value: camionsRentables, color: successColor },
+                { label: 'Camions Déficitaires', value: camionsDeficitaires, color: dangerColor }
+            ];
+    
+            statsRapides.forEach((stat, index) => {
+                const xPos = margin + (index * statsBoxWidth);
+    
+                doc.setFillColor(248, 249, 250);
+                doc.roundedRect(xPos, yPosition, statsBoxWidth, statsBoxHeight, 3, 3, 'F');
+                doc.setDrawColor(stat.color[0], stat.color[1], stat.color[2]);
+                doc.setLineWidth(0.5);
+                doc.roundedRect(xPos, yPosition, statsBoxWidth, statsBoxHeight, 3, 3);
+    
+                doc.setFontSize(9);
+                doc.setTextColor(stat.color[0], stat.color[1], stat.color[2]);
+                doc.setFont('helvetica', 'bold');
+                doc.text(stat.label, xPos + 5, yPosition + 7);
+    
+                doc.setFontSize(11);
+                doc.text(stat.value.toString(), xPos + 5, yPosition + 14);
+            });
+    
+            yPosition += statsBoxHeight + 10;
+    
+            // === TABLEAU PRINCIPAL ===
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'bold');
+            doc.text(' DÉTAIL PAR CAMION', margin, yPosition);
+            yPosition += 8;
+    
+            // En-tête du tableau
+            doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.rect(margin, yPosition, pageWidth - 2 * margin, 10, 'F');
+    
+            doc.setFontSize(9);
+            doc.setTextColor(255, 255, 255);
+    
+            const headers = ['N°', 'Camion', 'Trajets', 'Revenus (DH)', 'Charges (DH)', 'Bénéfice (DH)', 'Marge'];
+            const colWidths = [12, 35, 18, 28, 28, 28, 18];
+    
+            let xPos = margin + 2;
+            headers.forEach((header, index) => {
+                const align = header.includes('DH') ? 'right' : 'center';
+                const width = colWidths[index];
+    
+                if (align === 'right') {
+                    doc.text(header, xPos + width - 2, yPosition + 7, { align: 'right' });
+                } else if (align === 'center') {
+                    doc.text(header, xPos + width / 2, yPosition + 7, { align: 'center' });
+                } else {
+                    doc.text(header, xPos + 2, yPosition + 7);
+                }
+    
+                xPos += width;
+            });
+    
+            yPosition += 12;
+    
+            // Vérifier si on a des données
+            if (!camionsAffiches || camionsAffiches.length === 0) {
+                doc.setFontSize(12);
+                doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+                doc.text('Aucun camion trouvé pour cette période', pageWidth / 2, yPosition + 20, { align: 'center' });
+            } else {
+                // Données des camions
+                doc.setFontSize(8);
+                doc.setTextColor(0, 0, 0);
+                doc.setFont('helvetica', 'normal');
+    
+                camionsAffiches.forEach((camionStats, index) => {
+                    // Vérifier si besoin d'une nouvelle page (avec espace pour les détails)
+                    if (yPosition > doc.internal.pageSize.height - 80) {
+                        doc.addPage('landscape');
+                        yPosition = margin;
+    
+                        // Réafficher l'en-tête du tableau
+                        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+                        doc.rect(margin, yPosition, pageWidth - 2 * margin, 10, 'F');
+                        doc.setFontSize(9);
+                        doc.setTextColor(255, 255, 255);
+    
+                        xPos = margin + 2;
+                        headers.forEach((header, idx) => {
+                            const align = header.includes('DH') ? 'right' : 'center';
+                            const width = colWidths[idx];
+    
+                            if (align === 'right') {
+                                doc.text(header, xPos + width - 2, yPosition + 7, { align: 'right' });
+                            } else if (align === 'center') {
+                                doc.text(header, xPos + width / 2, yPosition + 7, { align: 'center' });
+                            } else {
+                                doc.text(header, xPos + 2, yPosition + 7);
+                            }
+    
+                            xPos += width;
+                        });
+    
+                        yPosition += 12;
+                        doc.setFontSize(8);
+                        doc.setTextColor(0, 0, 0);
+                    }
+    
+                    // Fond alterné
+                    if (index % 2 === 0) {
+                        doc.setFillColor(248, 249, 250);
+                        doc.rect(margin, yPosition - 2, pageWidth - 2 * margin, 10, 'F');
+                    }
+    
+                    // Afficher les données principales
+                    xPos = margin + 2;
+    
+                    // N°
+                    doc.text((index + 1).toString(), xPos + 6, yPosition + 6, { align: 'center' });
+                    xPos += colWidths[0];
+    
+                    // Camion
+                    const immat = camionStats.camion.immatriculation || 'N/A';
+                    const marque = camionStats.camion.marque || '';
+                    const modele = camionStats.camion.modele || '';
+                    doc.text(immat, xPos + 2, yPosition + 6);
+                    if (marque || modele) {
+                        doc.setFontSize(7);
+                        doc.text(`${marque} ${modele}`, xPos + 2, yPosition + 9);
+                        doc.setFontSize(8);
+                    }
+                    xPos += colWidths[1];
+    
+                    // Trajets
+                    doc.text(camionStats.totalTrajets.toString(), xPos + colWidths[2] / 2, yPosition + 6, { align: 'center' });
+                    xPos += colWidths[2];
+    
+                    // Revenus
+                    doc.text(camionStats.totalRevenus.toLocaleString() + ' DH', xPos + colWidths[3] - 2, yPosition + 6, { align: 'right' });
+                    xPos += colWidths[3];
+    
+                    // Charges
+                    doc.text(camionStats.totalCharges.toLocaleString() + ' DH', xPos + colWidths[4] - 2, yPosition + 6, { align: 'right' });
+                    xPos += colWidths[4];
+    
+                    // Bénéfice
+                    const beneficeText = camionStats.bilan.toLocaleString() + ' DH';
+                    doc.setTextColor(camionStats.bilan >= 0 ? successColor[0] : dangerColor[0],
+                        camionStats.bilan >= 0 ? successColor[1] : dangerColor[1],
+                        camionStats.bilan >= 0 ? successColor[2] : dangerColor[2]);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(beneficeText, xPos + colWidths[5] - 2, yPosition + 6, { align: 'right' });
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFont('helvetica', 'normal');
+                    xPos += colWidths[5];
+    
+                    // Marge
+                    const marge = camionStats.totalRevenus > 0 ? Math.round((camionStats.bilan / camionStats.totalRevenus) * 100) : 0;
+                    doc.text(marge + '%', xPos + colWidths[6] / 2, yPosition + 6, { align: 'center' });
+    
+                    // Ligne séparatrice
+                    doc.setDrawColor(220, 220, 220);
+                    doc.setLineWidth(0.1);
+                    doc.line(margin, yPosition + 8, pageWidth - margin, yPosition + 8);
+    
+                    yPosition += 10;
+    
+                    // ⭐⭐ AJOUTER LA SECTION DÉTAILLÉE DES CHARGES ⭐⭐
+                    if (camionStats.charges) {
+                        yPosition += 2; // Espacement
+                        
+                        // Ligne de séparation fine
+                        doc.setDrawColor(220, 220, 220);
+                        doc.setLineWidth(0.2);
+                        doc.line(margin + 10, yPosition, margin + 40, yPosition);
+                        
+                        // Titre détaillé
+                        doc.setFontSize(7);
+                        doc.setTextColor(100, 100, 100);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('Détail charges:', margin + 42, yPosition + 2);
+                        
+                        // Détail des charges sur 2 colonnes
+                        const chargesDetails = [
+                            { label: 'Gazoil', value: camionStats.charges.gazoil || 0 },
+                            { label: 'Entretien/Réparations', value: camionStats.charges.entretien || 0 },
+                            { label: 'Jawaz Autoroute', value: camionStats.charges.jawaz || 0 },
+                            { label: 'Autres charges', value: camionStats.charges.autres || 0 },
+                            { label: 'Frais de Déplacement', value: camionStats.charges.deplacement || 0 },
+                            { label: 'Frais Supplémentaires', value: camionStats.charges.frais_supplementaires || 0 }
+                        ];
+                        
+                        let detailY = yPosition;
+                        let detailX = margin + 42;
+                        
+                        // Afficher les charges sur 2 colonnes
+                        chargesDetails.forEach((charge, i) => {
+                            const col = Math.floor(i / 3); // 3 lignes par colonne
+                            const row = i % 3;
+                            
+                            const xPos = detailX + (col * 85);
+                            const yPos = detailY + 5 + (row * 4);
+                            
+                            doc.setFontSize(6);
+                            doc.setTextColor(80, 80, 80);
+                            doc.setFont('helvetica', 'normal');
+                            doc.text(charge.label, xPos, yPos);
+                            
+                            doc.setTextColor(0, 0, 0);
+                            doc.setFont('helvetica', 'bold');
+                            doc.text(charge.value.toLocaleString() + ' DH', xPos + 50, yPos, { align: 'right' });
+                        });
+                        
+                        // Ligne du total des charges
+                        const totalChargesX = detailX + 85;
+                        detailY += 17;
+                        
+                        doc.setDrawColor(150, 150, 150);
+                        doc.setLineWidth(0.1);
+                        doc.line(totalChargesX, detailY, totalChargesX + 60, detailY);
+                        
+                        doc.setFontSize(7);
+                        doc.setTextColor(0, 0, 0);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('Total des charges', totalChargesX, detailY + 3);
+                        doc.text(camionStats.totalCharges.toLocaleString() + ' DH', totalChargesX + 60, detailY + 3, { align: 'right' });
+                        
+                        yPosition = detailY + 10;
+                    } else {
+                        yPosition += 10;
+                    }
+                });
+    
+                // === LIGNE DES TOTAUX ===
+                if (yPosition > doc.internal.pageSize.height - 50) {
+                    doc.addPage('landscape');
+                    yPosition = margin;
+                }
+    
+                yPosition += 5;
+    
+                // Calculer les totaux
+                const totalTrajets = camionsAffiches.reduce((sum, camion) => sum + (camion.totalTrajets || 0), 0);
+                const revenusTotaux = camionsAffiches.reduce((sum, camion) => sum + (camion.totalRevenus || 0), 0);
+                const chargesTotales = camionsAffiches.reduce((sum, camion) => sum + (camion.totalCharges || 0), 0);
+                const resultatNet = revenusTotaux - chargesTotales;
+                const margeBrute = revenusTotaux > 0 ? ((resultatNet / revenusTotaux) * 100) : 0;
+                const tauxRentabilite = camionsAffiches.length > 0 ? 
+                    (camionsRentables / camionsAffiches.length) * 100 : 0;
+    
+                // Fond pour les totaux
+                doc.setFillColor(255, 243, 205); // Jaune clair
+                doc.rect(margin, yPosition, pageWidth - 2 * margin, 12, 'F');
+                doc.setDrawColor(warningColor[0], warningColor[1], warningColor[2]);
+                doc.setLineWidth(0.5);
+                doc.rect(margin, yPosition, pageWidth - 2 * margin, 12);
+    
+                xPos = margin + 2;
+    
+                // Libellé "TOTAUX"
+                doc.setFontSize(10);
+                doc.setTextColor(33, 37, 41);
+                doc.setFont('helvetica', 'bold');
+                doc.text('TOTAUX GÉNÉRAUX', xPos + 2, yPosition + 8);
+                xPos += colWidths[0] + colWidths[1];
+    
+                // Trajets totaux
+                doc.text(totalTrajets.toString(), xPos + colWidths[2] / 2, yPosition + 8, { align: 'center' });
+                xPos += colWidths[2];
+    
+                // Revenus totaux
+                doc.text(revenusTotaux.toLocaleString() + ' DH', xPos + colWidths[3] - 2, yPosition + 8, { align: 'right' });
+                xPos += colWidths[3];
+    
+                // Charges totales
+                doc.text(chargesTotales.toLocaleString() + ' DH', xPos + colWidths[4] - 2, yPosition + 8, { align: 'right' });
+                xPos += colWidths[4];
+    
+                // Résultat net
+                doc.setTextColor(resultatNet >= 0 ? successColor[0] : dangerColor[0],
+                    resultatNet >= 0 ? successColor[1] : dangerColor[1],
+                    resultatNet >= 0 ? successColor[2] : dangerColor[2]);
+                doc.setFont('helvetica', 'bold');
+                doc.text(resultatNet.toLocaleString() + ' DH', xPos + colWidths[5] - 2, yPosition + 8, { align: 'right' });
+                xPos += colWidths[5];
+    
+                // Marge brute
+                doc.setTextColor(0, 0, 0);
+                doc.text(margeBrute.toFixed(1) + '%', xPos + colWidths[6] / 2, yPosition + 8, { align: 'center' });
+                xPos += colWidths[6];
+    
+                // Statut global
+                // Statut global
+const statutGlobal = resultatNet >= 0 ? 'RENTABLE' : 'DÉFICITAIRE';
+doc.setFillColor(resultatNet >= 0 ? successColor[0] : dangerColor[0],
+    resultatNet >= 0 ? successColor[1] : dangerColor[1],
+    resultatNet >= 0 ? successColor[2] : dangerColor[2]);
+    
+// Positionner correctement le badge (dernière colonne)
+const badgeWidth = 24;
+const badgeX = xPos + (colWidths[6] - badgeWidth) / 2; // Centrer dans la dernière colonne
+doc.roundedRect(badgeX, yPosition + 3, badgeWidth, 6, 2, 2, 'F');
+
+doc.setFontSize(8);
+doc.setTextColor(255, 255, 255);
+doc.text(statutGlobal, xPos + colWidths[6] / 2, yPosition + 8, { align: 'center' });
+
+// Taux de rentabilité
+doc.setFontSize(6);
+doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+doc.text(`${tauxRentabilite.toFixed(0)}% des camions`, xPos + colWidths[6] / 2, yPosition + 12, { align: 'center' });
+            }
+    
+            // === PIED DE PAGE ===
+            const pageHeight = doc.internal.pageSize.height;
+            const pageCount = doc.internal.getNumberOfPages();
+    
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+    
+                doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+                doc.setLineWidth(0.8);
+                doc.line(margin, pageHeight - 30, pageWidth - margin, pageHeight - 30);
+    
+                doc.setFontSize(7);
+                doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+                doc.setFont('helvetica', 'bold');
+    
+                doc.text('SYSTÈME DE GESTION LOGISTIQUE - ARS Distribution & ARN Logistique', pageWidth / 2, pageHeight - 23, { align: 'center' });
+                doc.text('Rapport généré automatiquement par le système de gestion', pageWidth / 2, pageHeight - 19, { align: 'center' });
+    
+                doc.text(`Page ${i}/${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+            }
+    
+            // Sauvegarder le PDF
+            const dateStr = new Date().toISOString().split('T')[0];
+            const timeStr = new Date().getTime();
+            const fileName = `rapport_detaille_camions_${dateStr}_${timeStr}.pdf`;
+            doc.save(fileName);
+    
+        } catch (error) {
+            console.error('Erreur lors de la génération du PDF des camions:', error);
+            setError('Erreur lors de la génération du rapport PDF');
+        } finally {
+            setGeneratingPDF(false);
+        }
     };
 
     // ⭐ FONCTIONS DE FILTRAGE POUR LES FACTURES
@@ -1266,21 +1752,7 @@ function Dashboard() {
                     </Col>
                 )}
 
-                {!isFacturation && canAccessEmployes && (
-                    <Col xs={6} sm={4} md={2}>
-                        <Card className="text-center border-indigo shadow-sm h-100">
-                            <Card.Body className="p-2">
-                                <div className="text-indigo mb-1" style={{ fontSize: '1.5rem' }}>📏</div>
-                                <Card.Title className="mb-1" style={{ fontSize: '12px' }}>Kilométrage</Card.Title>
-                                <h6 className="text-indigo mb-0">
-                                    {statistiquesDetaillees?.totalKilometrage?.toLocaleString() || 0} km
-                                </h6>
-                                <small className="text-muted" style={{ fontSize: '10px' }}>Kilomètres parcourus</small>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                )}
-
+             
                 <Col xs={6} sm={4} md={2}>
                     <Card className="text-center border-info shadow-sm h-100">
                         <Card.Body className="p-2">
@@ -1700,15 +2172,17 @@ function Dashboard() {
                                     </Card.Header>
                                     <Card.Body className="py-3">
                                         <div className="table-responsive">
+                                            {/* Tableau situation camions - VERSION AMÉLIORÉE */}
                                             <Table striped bordered hover size="sm">
                                                 <thead>
                                                     <tr>
                                                         <th>Camion</th>
                                                         <th className="text-center">Trajets</th>
-                                                        <th className="text-end">Revenus (DH)</th>
-                                                        <th className="text-end">Charges (DH)</th>
-                                                        <th className="text-end">Bénéfice (DH)</th>
-                                                        <th className="text-center">Statut</th>
+                                                        <th className="text-end">Revenus</th>
+                                                        <th className="text-end">Charges</th>
+                                                        <th className="text-end">Bénéfice</th>
+                                                        <th className="text-center">Marge</th>
+                                                        <th className="text-center">Rentable</th>
                                                         <th className="text-center">Action</th>
                                                     </tr>
                                                 </thead>
@@ -1724,6 +2198,11 @@ function Dashboard() {
                                                             </td>
                                                             <td className="text-center">
                                                                 <Badge bg="primary">{camionStats.totalTrajets}</Badge>
+                                                                {camionStats.totalTrajets > 0 && (
+                                                                    <small className="d-block text-muted" style={{ fontSize: '10px' }}>
+
+                                                                    </small>
+                                                                )}
                                                             </td>
                                                             <td className="text-end">
                                                                 <span className="text-success">
@@ -1734,6 +2213,7 @@ function Dashboard() {
                                                                 <span className="text-danger">
                                                                     {camionStats.totalCharges.toLocaleString()} DH
                                                                 </span>
+
                                                             </td>
                                                             <td className="text-end">
                                                                 <strong className={camionStats.bilan >= 0 ? 'text-success' : 'text-danger'}>
@@ -1741,8 +2221,17 @@ function Dashboard() {
                                                                 </strong>
                                                             </td>
                                                             <td className="text-center">
+                                                                {camionStats.totalRevenus > 0 ? (
+                                                                    <span className="badge bg-light text-dark border">
+                                                                        {Math.round((camionStats.bilan / camionStats.totalRevenus) * 100)}%
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="badge bg-secondary">N/A</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="text-center">
                                                                 <Badge bg={camionStats.bilan >= 0 ? 'success' : 'danger'}>
-                                                                    {camionStats.bilan >= 0 ? '✅ Rentable' : '❌ Déficitaire'}
+                                                                    {camionStats.bilan >= 0 ? '✅ Oui' : '❌ Non'}
                                                                 </Badge>
                                                             </td>
                                                             <td className="text-center">
@@ -1756,6 +2245,101 @@ function Dashboard() {
                                                             </td>
                                                         </tr>
                                                     ))}
+
+                                                    {/* ⭐ LIGNE DES TOTAUX GÉNÉRAUX */}
+                                                    {/* ⭐ LIGNE DES TOTAUX GÉNÉRAUX - COULEUR MODIFIÉE */}
+                                                    {/* LIGNE DES TOTAUX GÉNÉRAUX - CALCUL SIMPLE */}
+                                                    <tr className="table-warning" style={{ fontWeight: 'bold' }}>
+                                                        <td>
+                                                            <strong>📊 TOTAUX GÉNÉRAUX</strong>
+                                                            <br />
+
+                                                        </td>
+
+                                                        {/* Trajets totaux */}
+                                                        <td className="text-center align-middle">
+                                                            <Badge bg="info">
+                                                                {/* Calculer la somme des trajets des camions affichés */}
+                                                                {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalTrajets || 0), 0) || 0}
+                                                            </Badge>
+                                                        </td>
+
+                                                        {/* Revenus totaux */}
+                                                        <td className="text-end align-middle">
+                                                            <span className="text-success">
+                                                                {/* Calculer la somme des revenus des camions affichés */}
+                                                                {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalRevenus || 0), 0).toLocaleString() || '0'} DH
+                                                            </span>
+                                                        </td>
+
+                                                        {/* Charges totales */}
+                                                        <td className="text-end align-middle">
+                                                            <span className="text-danger">
+                                                                {/* Calculer la somme des charges des camions affichés */}
+                                                                {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalCharges || 0), 0).toLocaleString() || '0'} DH
+                                                            </span>
+                                                            <small className="d-block text-muted" style={{ fontSize: '10px' }}>
+                                                                Gazoil: {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.charges?.gazoil || 0), 0).toLocaleString() || '0'} DH
+                                                            </small>
+                                                        </td>
+
+                                                        {/* Bénéfice total */}
+                                                        <td className="text-end align-middle">
+                                                            <strong className={
+                                                                (statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.bilan || 0), 0) >= 0)
+                                                                    ? 'text-success'
+                                                                    : 'text-danger'
+                                                            }>
+                                                                {/* Calculer la somme des bénéfices des camions affichés */}
+                                                                {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.bilan || 0), 0).toLocaleString() || '0'} DH
+                                                            </strong>
+                                                        </td>
+
+                                                        {/* Marge moyenne */}
+                                                        <td className="text-center align-middle">
+                                                            <span className="badge bg-light text-dark border">
+                                                                {(() => {
+                                                                    const totalRevenus = statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalRevenus || 0), 0) || 0;
+                                                                    const totalBilan = statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.bilan || 0), 0) || 0;
+                                                                    return totalRevenus > 0 ? `${((totalBilan / totalRevenus) * 100).toFixed(1)}%` : '0%';
+                                                                })()}
+                                                            </span>
+                                                        </td>
+
+                                                        {/* Statut global */}
+                                                        <td className="text-center align-middle">
+                                                            <Badge bg={
+                                                                (statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.bilan || 0), 0) >= 0)
+                                                                    ? 'success'
+                                                                    : 'danger'
+                                                            }>
+                                                                {(statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.bilan || 0), 0) >= 0) ? '✅ Oui' : '❌ Non'}
+                                                            </Badge>
+                                                            <small className="d-block text-muted" style={{ fontSize: '10px' }}>
+                                                                {statistiquesDetaillees?.camionsAvecStats?.filter(c => c.bilan >= 0).length || 0} sur {statistiquesDetaillees?.camionsAvecStats?.length || 0}
+                                                            </small>
+                                                        </td>
+
+                                                        <td className="text-center align-middle">
+                                                            <Button
+                                                                variant="outline-primary"
+                                                                size="sm"
+                                                                onClick={genererPDFCamions}
+                                                                disabled={generatingPDF || !statistiquesDetaillees?.camionsAvecStats?.length}
+                                                                title="Exporter le rapport complet en PDF"
+                                                                style={{ padding: '4px 10px', fontSize: '12px' }}
+                                                            >
+                                                                {generatingPDF ? (
+                                                                    <>
+                                                                        <Spinner animation="border" size="sm" className="me-1" />
+                                                                        Export...
+                                                                    </>
+                                                                ) : (
+                                                                    <>📤 Export</>
+                                                                )}
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
                                                 </tbody>
                                             </Table>
                                         </div>
@@ -1769,7 +2353,111 @@ function Dashboard() {
 
                 </>
             )}
+            {/* Section transporteurs - VERSION CORRIGÉE */}
+            {/* Section transporteurs - AFFICHER SOLDE RÉEL */}
+            {/* Section transporteurs - VERSION ULTRA-SIMPLE */}
+            {!isFacturation && canAccessTransporteurs && statistiquesTransporteurs.length > 0 && (
+                <Row className="g-3 mb-3">
+                    <Col xs={12}>
+                        <Card>
+                            <Card.Header className="py-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 className="mb-0" style={{ fontSize: '14px' }}>💰 Solde avec Transporteurs</h6>
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                    <Badge bg="info">
+                                        {statistiquesTransporteurs.length} transporteur(s)
+                                    </Badge>
+                                    <Badge bg={
+                                        statistiquesTransporteurs.reduce((sum, t) => sum + t.solde, 0) > 0
+                                            ? 'success'
+                                            : statistiquesTransporteurs.reduce((sum, t) => sum + t.solde, 0) < 0
+                                                ? 'danger'
+                                                : 'secondary'
+                                    }>
+                                        Total: {statistiquesTransporteurs.reduce((sum, t) => sum + t.solde, 0).toLocaleString()} DH
+                                    </Badge>
+                                </div>
+                            </Card.Header>
+                            <Card.Body className="py-3">
+                                <div className="table-responsive">
+                                    <Table bordered hover size="sm">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ borderBottom: '2px solid #dee2e6' }}>Transporteur</th>
+                                                <th className="text-end" style={{ borderBottom: '2px solid #dee2e6' }}>Solde</th>
+                                                <th className="text-center" style={{ borderBottom: '2px solid #dee2e6' }}>Situation</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {statistiquesTransporteurs.map((stats, index) => {
+                                                const solde = stats.solde || 0;
+                                                const isPositif = solde > 0;
+                                                const isNegatif = solde < 0;
+                                                const isZero = solde === 0;
 
+                                                return (
+                                                    <tr key={index} style={{
+                                                        borderBottom: index === statistiquesTransporteurs.length - 1
+                                                            ? '2px solid #dee2e6'  // Ligne plus épaisse pour le dernier
+                                                            : '1px solid #dee2e6' // Ligne normale pour les autres
+                                                    }}>
+                                                        <td style={{
+                                                            borderRight: '1px solid #dee2e6', // ⭐ Ligne verticale
+                                                            padding: '10px 15px'
+                                                        }}>
+                                                            <div className="d-flex align-items-center">
+
+                                                                <div>
+                                                                    <strong>{stats.transporteur.nom}</strong>
+                                                                    <br />
+
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="text-end" style={{
+                                                            borderRight: '1px solid #dee2e6', // ⭐ Ligne verticale
+                                                            padding: '10px 15px'
+                                                        }}>
+                                                            <strong className={
+                                                                isPositif ? 'text-success' :
+                                                                    isNegatif ? 'text-danger' :
+                                                                        'text-secondary'
+                                                            }>
+                                                                {isPositif ? '+' : ''}{solde.toLocaleString()} DH
+                                                            </strong>
+                                                            <br />
+                                                            <small className="text-muted" style={{ fontSize: '10px' }}>
+                                                                {stats.montantJeDonneNonPaye > 0 && (
+                                                                    <span>À payer: {stats.montantJeDonneNonPaye.toLocaleString()} DH</span>
+                                                                )}
+                                                                {stats.montantJeRecoisNonPaye > 0 && (
+                                                                    <span>À recevoir: {stats.montantJeRecoisNonPaye.toLocaleString()} DH</span>
+                                                                )}
+                                                            </small>
+                                                        </td>
+                                                        <td className="text-center" style={{ padding: '10px 15px' }}>
+                                                            <Badge bg={
+                                                                isPositif ? 'success' :
+                                                                    isNegatif ? 'danger' :
+                                                                        'secondary'
+                                                            }>
+                                                                {isPositif ? 'Nous reçoit' :
+                                                                    isNegatif ? 'Nous doit' :
+                                                                        'Équilibré'}
+                                                            </Badge>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </Table>
+                                </div>
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                </Row>
+            )}
             {/* Accès rapide - ADAPTÉ AUX PERMISSIONS */}
             <Row className="g-2 mt-4">
                 {canAccessCamions && (

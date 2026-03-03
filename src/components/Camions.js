@@ -9,10 +9,12 @@ import { camionService, chargeCamionService } from '../services/api';
 
 
 // Composant pour calculer la consommation
+// Composant pour calculer la consommation - VERSION RESPONSIVE MOBILE
 function CalculConsommation({ camions, onClose }) {
     const [chargesGazoil, setChargesGazoil] = useState([]);
     const [loading, setLoading] = useState(false);
     const [consommationParCamion, setConsommationParCamion] = useState({});
+    const [camionSelectionne, setCamionSelectionne] = useState('tous'); // ⭐ NOUVEAU : pour filtrer par camion
 
     useEffect(() => {
         fetchChargesGazoil();
@@ -21,11 +23,9 @@ function CalculConsommation({ camions, onClose }) {
     const fetchChargesGazoil = async () => {
         setLoading(true);
         try {
-            // Récupérer toutes les charges gazoil
             const response = await chargeCamionService.getAll();
             const toutesCharges = response.data;
 
-            // Filtrer seulement les charges gazoil
             const chargesFiltrees = toutesCharges.filter(charge =>
                 charge.categorie === 'gazoil' && charge.litres && charge.kilometrage
             );
@@ -42,7 +42,6 @@ function CalculConsommation({ camions, onClose }) {
     const calculerConsommation = (charges) => {
         const consommationParCamion = {};
 
-        // Grouper les charges par camion
         const chargesParCamion = {};
         charges.forEach(charge => {
             const camionId = charge.camion;
@@ -52,30 +51,23 @@ function CalculConsommation({ camions, onClose }) {
             chargesParCamion[camionId].push(charge);
         });
 
-        // Calculer la consommation pour chaque camion
         Object.keys(chargesParCamion).forEach(camionId => {
             const chargesCamion = chargesParCamion[camionId];
-
-            // Trier par date (plus ancien en premier)
             chargesCamion.sort((a, b) => new Date(a.date_charge) - new Date(b.date_charge));
 
             const calculs = [];
 
-            // Calculer la consommation entre chaque plein
             for (let i = 1; i < chargesCamion.length; i++) {
                 const chargeActuelle = chargesCamion[i];
                 const chargePrecedente = chargesCamion[i - 1];
 
                 const kmActuel = parseFloat(chargeActuelle.kilometrage);
                 const kmPrecedent = parseFloat(chargePrecedente.kilometrage);
-                const litresUtilises = parseFloat(chargeActuelle.litres); // Litres du plein ACTUEL
-
-                // VÉRIFICATION RENFORCÉE de la cohérence des données
+                const litresUtilises = parseFloat(chargeActuelle.litres);
                 const kmParcourus = kmActuel - kmPrecedent;
 
-                // Seuil de réalisme : max 2000 km/jour et min 0.1 L/km
                 const kmParJourRealistes = kmParcourus <= 2000;
-                const consommationRealiste = (litresUtilises / kmParcourus) <= 1.0; // Max 100 L/100km
+                const consommationRealiste = (litresUtilises / kmParcourus) <= 1.0;
 
                 if (kmActuel > kmPrecedent &&
                     litresUtilises > 0 &&
@@ -118,7 +110,6 @@ function CalculConsommation({ camions, onClose }) {
                 }
             }
 
-            // Calcul de la moyenne seulement sur les données valides
             const calculsValides = calculs.filter(c => c.valide);
             const consommationMoyenne = calculsValides.length > 0 ?
                 (calculsValides.reduce((sum, c) => sum + parseFloat(c.consommation), 0) /
@@ -139,126 +130,225 @@ function CalculConsommation({ camions, onClose }) {
         return camions.find(c => c.id == camionId) || {};
     };
 
+    // ⭐ FONCTION POUR FILTRER LES CAMIONS AFFICHÉS
+    const camionsAffiches = Object.keys(consommationParCamion)
+        .filter(camionId => camionSelectionne === 'tous' || camionId == camionSelectionne)
+        .map(camionId => ({
+            id: camionId,
+            info: getCamionInfo(camionId),
+            data: consommationParCamion[camionId]
+        }));
+
     if (loading) {
         return (
-            <Container fluid className="px-4 py-4">
+            <Container fluid className="px-3 py-3">
                 <div className="d-flex justify-content-between align-items-center mb-4">
-                    <h4>⛽ Calcul de Consommation</h4>
-                    <Button variant="secondary" onClick={onClose}>
-                        Fermer
+                    <h4 className="h5 mb-0">⛽ Calcul de Consommation</h4>
+                    <Button variant="secondary" size="sm" onClick={onClose}>
+                        <i className="bi bi-x-lg"></i> Fermer
                     </Button>
                 </div>
-                <div className="text-center">
-                    <Spinner animation="border" />
-                    <p className="mt-2">Calcul des consommations...</p>
+                <div className="text-center py-4">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">Calcul des consommations...</p>
                 </div>
             </Container>
         );
     }
 
     return (
+        <Container fluid className="px-3 py-3" style={{ minHeight: '70vh' }}>
+            {/* ⭐ EN-TÊTE RESPONSIVE */}
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
 
-        // Remplacer le return de chaque camion par :
 
-        <Container fluid className="px-4 py-4">
-        
+                <div className="d-flex flex-column flex-md-row gap-2 w-100 w-md-auto">
+                    {/* ⭐ FILTRE PAR CAMION POUR MOBILE */}
+                    <div className="w-100 w-md-auto">
+                        <Form.Select
+                            value={camionSelectionne}
+                            onChange={(e) => setCamionSelectionne(e.target.value)}
+                            size="sm"
+                            className="w-100"
+                        >
+                            <option value="tous">📋 Tous les camions</option>
+                            {Object.keys(consommationParCamion).map(camionId => {
+                                const camionInfo = getCamionInfo(camionId);
+                                return (
+                                    <option key={camionId} value={camionId}>
+                                        🚛 {camionInfo.immatriculation}
+                                    </option>
+                                );
+                            })}
+                        </Form.Select>
+                    </div>
+
+
+                </div>
+            </div>
 
             {Object.keys(consommationParCamion).length === 0 ? (
-                <Alert variant="info">
-                    Aucune donnée de consommation gazoil trouvée.
+                <Alert variant="info" className="text-center py-4">
+                    <i className="bi bi-info-circle fs-4 d-block mb-2"></i>
+                    <h5>Aucune donnée de consommation</h5>
+                    <p className="mb-0">Aucun plein de gazoil avec kilométrage trouvé.</p>
                 </Alert>
             ) : (
-                Object.keys(consommationParCamion).map(camionId => {
-                    const data = consommationParCamion[camionId];
-                    const camionInfo = getCamionInfo(camionId);
-
-                    return (
-                        // ⭐ AJOUTER UNE SCROLLBAR POUR CHAQUE CAMION
-                        <div key={camionId} style={{ maxHeight: '60vh', overflowY: 'auto', marginBottom: '20px', border: '1px solid #dee2e6', borderRadius: '5px', padding: '15px' }}>
-                            <Card>
-                                <Card.Header className="bg-light">
-                                    <h5 className="mb-0">
-                                        🚛 {camionInfo.immatriculation} - {camionInfo.marque} {camionInfo.modele}
+                <div className="row g-3">
+                    {camionsAffiches.map(({ id, info, data }) => (
+                        <div key={id} className="col-12">
+                            {/* ⭐ CARTE PRINCIPALE RESPONSIVE */}
+                            <Card className="shadow-sm border-0 mb-3">
+                                <Card.Header className="bg-light py-3">
+                                    <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
+                                        <div>
+                                            <h5 className="mb-1 d-flex align-items-center">
+                                                <i className="bi bi-truck me-2"></i>
+                                                {info.immatriculation}
+                                                <small className="text-muted ms-2">
+                                                    {info.marque} {info.modele}
+                                                </small>
+                                            </h5>
+                                        </div>
                                         {data.consommationMoyenne !== 'N/A' && (
-                                            <Badge bg="primary" className="ms-2">
-                                                Moyenne: {data.consommationMoyenne} L/100km
+                                            <Badge bg="primary" className="fs-6 px-3 py-2">
+                                                <i className="bi bi-speedometer2 me-1"></i>
+                                                {data.consommationMoyenne} L/100km
                                             </Badge>
                                         )}
-                                    </h5>
-                                </Card.Header>
-                                <Card.Body>
-                                    {/* Tableau des pleins - INVERSE L'ORDRE */}
-                                    <h6>📋 Historique des pleins</h6>
-                                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                        <Table striped bordered size="sm" className="mb-4">
-                                            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}>
-                                                <tr>
-                                                    <th>Date</th>
-                                                    <th>Montant</th>
-                                                    <th>Kilométrage</th>
-                                                    <th>Litres</th>
-                                                    <th>Prix/L</th>
-                                                    <th>Description</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {[...data.charges]
-                                                    .reverse() // ⭐ AFFICHER DU PLUS RÉCENT AU PLUS ANCIEN
-                                                    .map((charge, index) => (
-                                                        <tr key={charge.id}>
-                                                            <td>{charge.date_charge}</td>
-                                                            <td>{parseFloat(charge.montant).toFixed(2)} DH</td>
-                                                            <td>{parseFloat(charge.kilometrage).toFixed(1)} km</td>
-                                                            <td>{parseFloat(charge.litres).toFixed(2)} L</td>
-                                                            <td>
-                                                                {charge.litres > 0 ?
-                                                                    (parseFloat(charge.montant) / parseFloat(charge.litres)).toFixed(3) + ' DH' :
-                                                                    '0.000 DH'
-                                                                }
-                                                            </td>
-                                                            <td>{charge.description || 'Plein gazoil'}</td>
-                                                        </tr>
-                                                    ))}
-                                            </tbody>
-                                        </Table>
                                     </div>
+                                </Card.Header>
 
-                                    {/* Tableau des calculs de consommation - INVERSE L'ORDRE */}
-                                    {data.calculs.length > 0 && (
-                                        <>
-                                            <h6>📊 Calculs de consommation</h6>
+                                <Card.Body className="p-0">
+                                    {/* ⭐ SECTION PLEINS - VERSION MOBILE */}
+                                    <div className="p-3 border-bottom">
+                                        <h6 className="mb-3 d-flex align-items-center">
+                                            <i className="bi bi-calendar-check me-2"></i>
+                                            Historique des pleins ({data.charges.length})
+                                        </h6>
+
+                                        {/* VERSION DESKTOP (tableau) */}
+                                        <div className="d-none d-md-block">
                                             <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                                <Table striped bordered size="sm">
+                                                <Table striped bordered size="sm" className="mb-0">
                                                     <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}>
                                                         <tr>
-                                                            <th>Période</th>
-                                                            <th>Km début</th>
-                                                            <th>Km fin</th>
-                                                            <th>Km parcourus</th>
+                                                            <th>Date</th>
+                                                            <th>Montant</th>
+                                                            <th>Kilométrage</th>
                                                             <th>Litres</th>
-                                                            <th>Consommation</th>
-                                                            <th>Statut</th>
+                                                            <th>Prix/L</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {[...data.calculs]
-                                                            .reverse() // ⭐ AFFICHER DU PLUS RÉCENT AU PLUS ANCIEN
-                                                            .map((calcul, index) => (
+                                                        {[...data.charges].reverse().map((charge, index) => (
+                                                            <tr key={charge.id}>
+                                                                <td>{charge.date_charge}</td>
+                                                                <td>{parseFloat(charge.montant).toFixed(2)} DH</td>
+                                                                <td>{parseFloat(charge.kilometrage).toFixed(0)} km</td>
+                                                                <td>{parseFloat(charge.litres).toFixed(0)} L</td>
+                                                                <td>
+                                                                    {charge.litres > 0 ?
+                                                                        (parseFloat(charge.montant) / parseFloat(charge.litres)).toFixed(3) + ' DH' :
+                                                                        '0.000 DH'
+                                                                    }
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </Table>
+                                            </div>
+                                        </div>
+
+                                        {/* ⭐ VERSION MOBILE (cartes) */}
+                                        <div className="d-block d-md-none">
+                                            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                                {[...data.charges].reverse().map((charge, index) => (
+                                                    <Card key={charge.id} className="mb-2 border shadow-sm">
+                                                        <Card.Body className="p-3">
+                                                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                                                <div>
+                                                                    <h6 className="text-primary mb-1">{charge.date_charge}</h6>
+                                                                    <div className="d-flex align-items-center">
+                                                                        <Badge bg="info" className="me-2">
+                                                                            {parseFloat(charge.montant).toFixed(2)} DH
+                                                                        </Badge>
+                                                                    </div>
+                                                                </div>
+                                                                <Badge bg="secondary">
+                                                                    {parseFloat(charge.kilometrage).toFixed(0)} km
+                                                                </Badge>
+                                                            </div>
+
+                                                            <Row className="g-2 mb-2">
+                                                                <Col xs={6}>
+                                                                    <div className="text-center p-2 bg-light rounded">
+                                                                        <small className="text-muted d-block">Litres</small>
+                                                                        <strong>{parseFloat(charge.litres).toFixed(0)} L</strong>
+                                                                    </div>
+                                                                </Col>
+                                                                <Col xs={6}>
+                                                                    <div className="text-center p-2 bg-light rounded">
+                                                                        <small className="text-muted d-block">Prix/Litre</small>
+                                                                        <strong>
+                                                                            {charge.litres > 0 ?
+                                                                                (parseFloat(charge.montant) / parseFloat(charge.litres)).toFixed(3) + ' DH' :
+                                                                                '0.000 DH'
+                                                                            }
+                                                                        </strong>
+                                                                    </div>
+                                                                </Col>
+                                                            </Row>
+
+                                                            {charge.description && (
+                                                                <div className="mt-2 p-2 bg-warning bg-opacity-10 rounded">
+                                                                    <small className="text-muted d-block">Description</small>
+                                                                    <small>{charge.description}</small>
+                                                                </div>
+                                                            )}
+                                                        </Card.Body>
+                                                    </Card>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ⭐ SECTION CALCULS - VERSION MOBILE */}
+                                    {data.calculs.length > 0 && (
+                                        <div className="p-3">
+                                            <h6 className="mb-3 d-flex align-items-center">
+                                                <i className="bi bi-calculator me-2"></i>
+                                                Calculs de consommation ({data.calculs.length})
+                                            </h6>
+
+                                            {/* VERSION DESKTOP */}
+                                            <div className="d-none d-md-block">
+                                                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                                    <Table striped bordered size="sm" className="mb-0">
+                                                        <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}>
+                                                            <tr>
+                                                                <th>Période</th>
+                                                                <th>Km parcourus</th>
+                                                                <th>Litres</th>
+                                                                <th>Consommation</th>
+                                                                <th>Statut</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {[...data.calculs].reverse().map((calcul, index) => (
                                                                 <tr key={index} className={calcul.valide ? '' : 'table-warning'}>
                                                                     <td>
-                                                                        {calcul.dateDebut} → {calcul.dateFin}
+                                                                        <small>{calcul.dateDebut} → {calcul.dateFin}</small>
                                                                     </td>
-                                                                    <td>{calcul.kmDebut.toFixed(1)} km</td>
-                                                                    <td>{calcul.kmFin.toFixed(1)} km</td>
-                                                                    <td>{calcul.kmParcourus.toFixed(1)} km</td>
-                                                                    <td>{calcul.litresConsommes.toFixed(2)} L</td>
+                                                                    <td>{calcul.kmParcourus.toFixed(0)} km</td>
+                                                                    <td>{calcul.litresConsommes.toFixed(0)} L</td>
                                                                     <td>
                                                                         {calcul.valide ? (
-                                                                            <Badge bg="success">
+                                                                            <Badge bg="success" className="w-100">
                                                                                 {calcul.consommation} L/100km
                                                                             </Badge>
                                                                         ) : (
-                                                                            <Badge bg="secondary">N/A</Badge>
+                                                                            <Badge bg="secondary" className="w-100">N/A</Badge>
                                                                         )}
                                                                     </td>
                                                                     <td>
@@ -270,24 +360,175 @@ function CalculConsommation({ camions, onClose }) {
                                                                     </td>
                                                                 </tr>
                                                             ))}
-                                                    </tbody>
-                                                </Table>
+                                                        </tbody>
+                                                    </Table>
+                                                </div>
                                             </div>
-                                        </>
+
+                                            {/* ⭐ VERSION MOBILE (cartes) */}
+                                            <div className="d-block d-md-none">
+                                                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                                    {[...data.calculs].reverse().map((calcul, index) => (
+                                                        <Card key={index} className={`mb-2 border ${calcul.valide ? '' : 'border-warning'}`}>
+                                                            <Card.Body className="p-3">
+                                                                {/* En-tête avec dates */}
+                                                                <div className="d-flex justify-content-between align-items-start mb-2">
+                                                                    <div>
+                                                                        <h6 className="text-primary mb-1">
+                                                                            {calcul.dateDebut} → {calcul.dateFin}
+                                                                        </h6>
+                                                                        
+                                                                    </div>
+                                                                    {calcul.valide && (
+                                                                        <Badge bg="success" className="fs-6">
+                                                                            {calcul.consommation} L/100km
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Kilométrage */}
+                                                                <div className="mb-2 p-2 bg-light rounded">
+                                                                    <Row className="g-2">
+                                                                        <Col xs={4}>
+                                                                            <div className="text-center">
+                                                                                <small className="text-muted d-block">Km début</small>
+                                                                                <strong>{calcul.kmDebut.toFixed(0)}</strong>
+                                                                            </div>
+                                                                        </Col>
+                                                                        <Col xs={4}>
+                                                                            <div className="text-center">
+                                                                                <small className="text-muted d-block">Km fin</small>
+                                                                                <strong>{calcul.kmFin.toFixed(0)}</strong>
+                                                                            </div>
+                                                                        </Col>
+                                                                        <Col xs={4}>
+                                                                            <div className="text-center">
+                                                                                <small className="text-muted d-block">Parcourus</small>
+                                                                                <strong className="text-primary">{calcul.kmParcourus.toFixed(0)} km</strong>
+                                                                            </div>
+                                                                        </Col>
+                                                                    </Row>
+                                                                </div>
+
+                                                                {/* Consommation */}
+                                                                <div className="mb-2 p-2 bg-success bg-opacity-10 rounded">
+                                                                    <div className="d-flex justify-content-between align-items-center">
+                                                                        <div>
+                                                                            <small className="text-muted d-block">Litres consommés</small>
+                                                                            <strong>{calcul.litresConsommes.toFixed(0)} L</strong>
+                                                                        </div>
+                                                                        <div className="text-end">
+                                                                            <small className="text-muted d-block">Consommation</small>
+                                                                            <strong className={calcul.valide ? "text-success" : "text-secondary"}>
+                                                                                {calcul.valide ? `${calcul.consommation} L/100km` : 'N/A'}
+                                                                            </strong>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </Card.Body>
+                                                        </Card>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
                                     )}
 
+                                    {/* Message si pas assez de calculs */}
                                     {data.calculs.length === 0 && (
-                                        <Alert variant="info" className="mb-0">
-                                            ❌ Pas assez de données pour calculer la consommation.
-                                            Il faut au moins 2 pleins de gazoil avec des kilométrages cohérents.
-                                        </Alert>
+                                        <div className="p-3">
+                                            <Alert variant="info" className="mb-0">
+                                                <div className="d-flex align-items-center">
+                                                    <i className="bi bi-exclamation-triangle fs-4 me-3"></i>
+                                                    <div>
+                                                        <strong>Pas assez de données</strong>
+                                                        <p className="mb-0 small">
+                                                            Il faut au moins 2 pleins de gazoil avec des kilométrages cohérents pour calculer la consommation.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </Alert>
+                                        </div>
                                     )}
                                 </Card.Body>
+
+                                {/* ⭐ RÉSUMÉ EN BAS DE LA CARTE */}
+                               
                             </Card>
                         </div>
-                    );
-                })
+                    ))}
+                </div>
             )}
+
+            {/* ⭐ STYLES RESPONSIVE */}
+            <style>{`
+                /* Styles pour mobile */
+                @media (max-width: 768px) {
+                    .modal-body {
+                        padding: 1rem !important;
+                    }
+                    
+                    .card {
+                        border-radius: 10px !important;
+                    }
+                    
+                    .badge {
+                        font-size: 0.75rem !important;
+                        padding: 0.35em 0.65em !important;
+                    }
+                    
+                    h5, h6 {
+                        font-size: 1rem !important;
+                    }
+                    
+                    .table-responsive {
+                        max-height: 250px !important;
+                    }
+                }
+                
+                /* Animation pour les cartes */
+                .card {
+                    transition: transform 0.2s;
+                }
+                
+                .card:hover {
+                    transform: translateY(-2px);
+                }
+                
+                /* Scrollbar personnalisée */
+                .custom-scroll {
+                    scrollbar-width: thin;
+                    scrollbar-color: #adb5bd #f8f9fa;
+                }
+                
+                .custom-scroll::-webkit-scrollbar {
+                    width: 6px;
+                }
+                
+                .custom-scroll::-webkit-scrollbar-track {
+                    background: #f8f9fa;
+                }
+                
+                .custom-scroll::-webkit-scrollbar-thumb {
+                    background-color: #adb5bd;
+                    border-radius: 20px;
+                }
+                
+                /* Espacement sur mobile */
+                @media (max-width: 576px) {
+                    .modal-header, .modal-footer {
+                        padding: 1rem !important;
+                    }
+                    
+                    .btn {
+                        padding: 0.375rem 0.75rem !important;
+                        font-size: 0.875rem !important;
+                    }
+                    
+                    .form-select {
+                        font-size: 0.875rem !important;
+                    }
+                }
+            `}</style>
         </Container>
     );
 }
@@ -324,33 +565,86 @@ function StatistiquesCamions({ camions }) {
     const fetchStatistiques = async () => {
         setLoading(true);
         try {
-            const params = {
-                annee: filters.annee,
-                camion_id: filters.camion_id || '',
-                mois: filters.mois || '',
-                type_charge: filters.type_charge || ''
+            // Récupérer TOUTES les charges d'abord
+            const response = await chargeCamionService.getAll();
+            let toutesCharges = response.data || [];
+
+            // ⭐ FILTRER PAR MOIS SÉLECTIONNÉ
+            const anneeSelectionnee = filters.annee;
+            const moisSelectionne = filters.mois || (new Date().getMonth() + 1);
+
+            let chargesFiltrees = toutesCharges.filter(charge => {
+                const dateCharge = new Date(charge.date_charge);
+                const anneeFiltre = dateCharge.getFullYear() === anneeSelectionnee;
+
+                if (moisSelectionne === "0") {
+                    // Si "Tous les mois" est sélectionné, filtrer seulement par année
+                    return anneeFiltre;
+                } else {
+                    // Sinon filtrer par année et mois
+                    return anneeFiltre && (dateCharge.getMonth() + 1) === parseInt(moisSelectionne);
+                }
+            });
+
+            // Appliquer les autres filtres
+            if (filters.camion_id) {
+                chargesFiltrees = chargesFiltrees.filter(charge => charge.camion == filters.camion_id);
+            }
+
+            if (filters.type_charge) {
+                chargesFiltrees = chargesFiltrees.filter(charge => charge.type_charge === filters.type_charge);
+            }
+
+            if (filters.categories.length > 0) {
+                chargesFiltrees = chargesFiltrees.filter(charge =>
+                    filters.categories.includes(charge.categorie)
+                );
+            }
+
+            console.log(`✅ ${chargesFiltrees.length} charges trouvées pour ${getMoisNom(moisSelectionne)} ${anneeSelectionnee}`);
+
+            // Calculer les statistiques
+            const stats = {
+                stats_globales: {
+                    total_montant: chargesFiltrees.reduce((sum, charge) => sum + parseFloat(charge.montant || 0), 0),
+                    nombre_charges: chargesFiltrees.length,
+                    moyenne_montant: chargesFiltrees.length > 0 ?
+                        chargesFiltrees.reduce((sum, charge) => sum + parseFloat(charge.montant || 0), 0) / chargesFiltrees.length : 0
+                },
+                dernieres_charges: chargesFiltrees,
+
+                // Calculer stats par type
+                stats_par_type: Object.entries(
+                    chargesFiltrees.reduce((acc, charge) => {
+                        const type = charge.type_charge || 'non_specifie';
+                        if (!acc[type]) acc[type] = { total: 0, count: 0 };
+                        acc[type].total += parseFloat(charge.montant || 0);
+                        acc[type].count += 1;
+                        return acc;
+                    }, {})
+                ).map(([type, stats]) => ({
+                    type_charge: type,
+                    total: stats.total,
+                    count: stats.count
+                })),
+
+                // Calculer stats par catégorie
+                stats_par_categorie: Object.entries(
+                    chargesFiltrees.reduce((acc, charge) => {
+                        const categorie = charge.categorie || 'autre';
+                        if (!acc[categorie]) acc[categorie] = { total: 0, count: 0 };
+                        acc[categorie].total += parseFloat(charge.montant || 0);
+                        acc[categorie].count += 1;
+                        return acc;
+                    }, {})
+                ).map(([categorie, stats]) => ({
+                    categorie: categorie,
+                    total: stats.total,
+                    count: stats.count
+                }))
             };
 
-            // ⭐ SOLUTION TEMPORAIRE : Envoyer une seule catégorie
-            if (filters.categories.length === 1) {
-                // Si une seule catégorie sélectionnée, l'envoyer normalement
-                params.categorie = filters.categories[0];
-                console.log('🎯 Une catégorie:', params.categorie);
-            }
-            else if (filters.categories.length > 1) {
-                // Si plusieurs catégories, prendre la première seulement
-                // (solution temporaire en attendant le correctif backend)
-                params.categorie = filters.categories[0];
-                console.log('⚠️ Plusieurs catégories sélectionnées - utilisation de la première seulement:', params.categorie);
-                console.log('💡 Catégories ignorées:', filters.categories.slice(1));
-            }
-            // Si 0 catégorie, pas de filtre (déjà bon)
-
-            console.log('🚀 Paramètres envoyés:', params);
-
-            const response = await chargeCamionService.getStatistiquesGlobales(params);
-            console.log('✅ Réponse reçue - Données filtrées:', response.data.dernieres_charges?.length || 0, 'charges');
-            setStatistiques(response.data);
+            setStatistiques(stats);
 
         } catch (error) {
             console.error('💥 Erreur:', error);
@@ -407,15 +701,18 @@ function StatistiquesCamions({ camions }) {
 
     const handleGeneratePDF = async () => {
         try {
-            // ⭐ Utiliser les mêmes paramètres que fetchStatistiques
+            // Déterminer le mois à filtrer
+            const anneeSelectionnee = filters.annee;
+            const moisSelectionne = filters.mois || (new Date().getMonth() + 1);
+
+            // ⭐ ÉTAPE 1 : Récupérer les statistiques
             const params = {
-                annee: filters.annee,
+                annee: anneeSelectionnee,
                 camion_id: filters.camion_id || '',
-                mois: filters.mois || '',
+                mois: moisSelectionne,
                 type_charge: filters.type_charge || ''
             };
 
-            // ⭐ Même logique de filtrage
             if (filters.categories.length === 1) {
                 params.categorie = filters.categories[0];
             }
@@ -426,7 +723,52 @@ function StatistiquesCamions({ camions }) {
             console.log('📊 PDF - Paramètres envoyés:', params);
 
             const response = await chargeCamionService.getStatistiquesGlobales(params);
-            const data = response.data;
+            let data = response.data;
+
+            // ⭐ ÉTAPE 2 : Récupérer TOUTES les charges séparément
+            console.log(`ℹ️ Statistiques: ${data.stats_globales?.nombre_charges || 0} charges totales`);
+            console.log(`ℹ️ Dernières charges: ${data.dernieres_charges?.length || 0} charges dans la réponse`);
+
+            // Si on a moins de charges que le total indiqué
+            if (data.dernieres_charges?.length < (data.stats_globales?.nombre_charges || 0)) {
+                console.log('⚠️ Récupération incomplète, on récupère toutes les charges...');
+
+                // Récupérer toutes les charges
+                const toutesChargesResponse = await chargeCamionService.getAll();
+                let toutesCharges = toutesChargesResponse.data || [];
+
+                // Filtrer par mois
+                const debutMois = new Date(anneeSelectionnee, moisSelectionne - 1, 1);
+                const finMois = new Date(anneeSelectionnee, moisSelectionne, 0);
+
+                let chargesFiltrees = toutesCharges.filter(charge => {
+                    const dateCharge = new Date(charge.date_charge);
+                    return dateCharge >= debutMois && dateCharge <= finMois;
+                });
+
+                // Appliquer les autres filtres
+                if (filters.camion_id) {
+                    chargesFiltrees = chargesFiltrees.filter(charge => charge.camion == filters.camion_id);
+                }
+
+                if (filters.type_charge) {
+                    chargesFiltrees = chargesFiltrees.filter(charge => charge.type_charge === filters.type_charge);
+                }
+
+                if (filters.categories.length > 0) {
+                    chargesFiltrees = chargesFiltrees.filter(charge =>
+                        filters.categories.includes(charge.categorie)
+                    );
+                }
+
+                // Trier par date (plus récent en premier)
+                chargesFiltrees.sort((a, b) => new Date(b.date_charge) - new Date(a.date_charge));
+
+                // Remplacer les données
+                data.dernieres_charges = chargesFiltrees;
+
+                console.log(`✅ ${chargesFiltrees.length} charges récupérées après filtrage`);
+            }
 
             const doc = new jsPDF();
             const pageWidth = doc.internal.pageSize.getWidth();
@@ -449,7 +791,7 @@ function StatistiquesCamions({ camions }) {
                 `Camion: ${camions.find(c => c.id == filters.camion_id)?.immatriculation}` :
                 'Tous les camions';
 
-            const periodeText = `Période: ${filters.annee}${filters.mois ? ` - ${getMoisNom(parseInt(filters.mois))}` : ''}`;
+            const periodeText = `Période: ${getMoisNom(moisSelectionne)} ${anneeSelectionnee}`;
 
             const categoriesText = `Catégories: ${filters.categories.length > 0 ?
                 filters.categories.map(cat => getCategorieLabel(cat)).join(', ') :
@@ -473,7 +815,7 @@ function StatistiquesCamions({ camions }) {
                 doc.setFont('helvetica', 'normal');
 
                 const totalCharges = data.stats_globales.total_montant?.toFixed(2) || '0.00';
-                const nombreCharges = data.stats_globales.nombre_charges || 0;
+                const nombreCharges = data.dernieres_charges?.length || data.stats_globales.nombre_charges || 0;
 
                 doc.text(`Total: ${totalCharges} DH`, margin, yPosition);
                 yPosition += 5;
@@ -481,7 +823,7 @@ function StatistiquesCamions({ camions }) {
                 yPosition += 10;
             }
 
-            // === DÉTAIL DES CHARGES - TABLEAU SIMPLIFIÉ ===
+            // === DÉTAIL DES CHARGES - TOUTES LES CHARGES ===
             if (data.dernieres_charges && data.dernieres_charges.length > 0) {
                 // Vérifier si on a besoin d'une nouvelle page
                 if (yPosition > pageHeight - 100) {
@@ -491,22 +833,22 @@ function StatistiquesCamions({ camions }) {
 
                 doc.setFontSize(12);
                 doc.setFont('helvetica', 'bold');
-                doc.text('DÉTAIL DES CHARGES', margin, yPosition);
+                // ⭐ CORRECTION : Afficher le vrai nombre
+                doc.text(`DÉTAIL DES CHARGES (${data.dernieres_charges.length} charges)`, margin, yPosition);
                 yPosition += 10;
 
-                // En-tête du tableau - COLONNES SIMPLIFIÉES
+                // En-tête du tableau
                 doc.setFillColor(60, 60, 60);
                 doc.rect(margin, yPosition, pageWidth - 2 * margin, 8, 'F');
                 doc.setTextColor(255, 255, 255);
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'bold');
 
-                // Définir les positions des colonnes
                 const colDate = margin + 3;
-                const colCamion = colDate + 25;
-                const colCategorie = colCamion + 30;
-                const colDescription = colCategorie + 35;
-                const colMontant = colDescription + 45;
+                const colCamion = colDate + 20;
+                const colCategorie = colCamion + 20;
+                const colDescription = colCategorie + 20;
+                const colMontant = colDescription + 66;
                 const colDetails = colMontant + 25;
 
                 doc.text('Date', colDate, yPosition + 6);
@@ -519,7 +861,7 @@ function StatistiquesCamions({ camions }) {
                 yPosition += 12;
                 doc.setTextColor(0, 0, 0);
 
-                // Données du tableau
+                // ⭐ AFFICHER TOUTES LES CHARGES
                 data.dernieres_charges.forEach((charge, index) => {
                     // Vérifier si on a besoin d'une nouvelle page
                     if (yPosition > pageHeight - 20) {
@@ -564,7 +906,7 @@ function StatistiquesCamions({ camions }) {
 
                     // Description (tronquée)
                     const description = charge.description || '-';
-                    const shortDesc = description.length > 25 ? description.substring(0, 25) + '...' : description;
+                    const shortDesc = description.length > 30 ? description.substring(0, 30) + '...' : description;
                     doc.text(shortDesc, colDescription, yPosition + 6);
 
                     // Montant
@@ -601,7 +943,9 @@ function StatistiquesCamions({ camions }) {
                 yPosition += 15;
             }
 
-            // === RÉPARTITION PAR CATÉGORIE (seulement si plusieurs catégories) ===
+            // ... reste du code inchangé (répartition par catégorie et type) ...
+
+            // === RÉPARTITION PAR CATÉGORIE ===
             if (data.stats_par_categorie && data.stats_par_categorie.length > 1) {
                 if (yPosition > pageHeight - 100) {
                     doc.addPage();
@@ -621,9 +965,13 @@ function StatistiquesCamions({ camions }) {
                 doc.setFontSize(9);
                 doc.setFont('helvetica', 'bold');
 
-                doc.text('Catégorie', margin + 5, yPosition + 6);
-                doc.text('Montant', pageWidth - margin - 40, yPosition + 6);
-                doc.text('Nombre', pageWidth - margin - 15, yPosition + 6);
+                const colCat = margin + 5;
+                const colMont = pageWidth - margin - 40;
+                const colNb = pageWidth - margin - 15;
+
+                doc.text('Catégorie', colCat, yPosition + 6);
+                doc.text('Montant', colMont, yPosition + 6);
+                doc.text('Nombre', colNb, yPosition + 6);
 
                 yPosition += 12;
                 doc.setTextColor(0, 0, 0);
@@ -633,6 +981,19 @@ function StatistiquesCamions({ camions }) {
                     if (yPosition > pageHeight - 20) {
                         doc.addPage();
                         yPosition = 20;
+
+                        doc.setFillColor(80, 80, 80);
+                        doc.rect(margin, yPosition, pageWidth - 2 * margin, 8, 'F');
+                        doc.setTextColor(255, 255, 255);
+                        doc.setFontSize(9);
+                        doc.setFont('helvetica', 'bold');
+
+                        doc.text('Catégorie', colCat, yPosition + 6);
+                        doc.text('Montant', colMont, yPosition + 6);
+                        doc.text('Nombre', colNb, yPosition + 6);
+
+                        yPosition += 12;
+                        doc.setTextColor(0, 0, 0);
                     }
 
                     if (index % 2 === 0) {
@@ -643,15 +1004,17 @@ function StatistiquesCamions({ camions }) {
                     doc.setFontSize(9);
                     doc.setFont('helvetica', 'normal');
 
-                    doc.text(getCategorieLabel(stat.categorie), margin + 5, yPosition + 6);
-                    doc.text(`${parseFloat(stat.total || 0).toFixed(2)} DH`, pageWidth - margin - 40, yPosition + 6);
-                    doc.text(`${stat.count || 0}`, pageWidth - margin - 15, yPosition + 6);
+                    doc.text(getCategorieLabel(stat.categorie), colCat, yPosition + 6);
+                    doc.text(`${parseFloat(stat.total || 0).toFixed(2)} DH`, colMont, yPosition + 6);
+                    doc.text(`${stat.count || 0}`, colNb, yPosition + 6);
 
                     yPosition += 10;
                 });
+
+                yPosition += 10;
             }
 
-            // === PIED DE PAGE SIMPLE ===
+            // === PIED DE PAGE ===
             const pageCount = doc.internal.getNumberOfPages();
             for (let i = 1; i <= pageCount; i++) {
                 doc.setPage(i);
@@ -659,6 +1022,7 @@ function StatistiquesCamions({ camions }) {
                 doc.setFontSize(8);
                 doc.setFont('helvetica', 'italic');
                 doc.setTextColor(100, 100, 100);
+
                 doc.text(
                     `Page ${i}/${pageCount} - ${new Date().toLocaleDateString('fr-FR')}`,
                     pageWidth / 2,
@@ -667,12 +1031,12 @@ function StatistiquesCamions({ camions }) {
                 );
             }
 
-            // Nom du fichier simple
-            const fileName = `charges_${filters.annee}${filters.mois ? `_${getMoisNom(parseInt(filters.mois)).toLowerCase()}` : ''}.pdf`;
+            // Nom du fichier
+            const fileName = `charges_${getMoisNom(moisSelectionne).toLowerCase()}_${anneeSelectionnee}.pdf`;
 
             doc.save(fileName);
 
-            console.log('✅ PDF généré avec succès');
+            console.log(`✅ PDF généré avec ${data.dernieres_charges?.length || 0} charges`);
 
         } catch (error) {
             console.error('❌ Erreur lors de la génération du PDF:', error);
@@ -710,6 +1074,18 @@ function StatistiquesCamions({ camions }) {
         const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
         return moisNoms[mois - 1] || '';
+    };
+    // ⭐ AJOUTEZ CETTE FONCTION
+    const getPeriodeMoisEnCours = () => {
+        const maintenant = new Date();
+        const debutMois = new Date(maintenant.getFullYear(), maintenant.getMonth(), 1);
+        const finMois = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 0);
+
+        return {
+            debut: debutMois.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }),
+            fin: finMois.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+            moisAnnee: `${getMoisNom(maintenant.getMonth() + 1)} ${maintenant.getFullYear()}`
+        };
     };
 
     return (
@@ -764,12 +1140,13 @@ function StatistiquesCamions({ camions }) {
                                         onChange={(e) => handleFilterChange('mois', e.target.value)}
                                         size="sm"
                                     >
-                                        <option value="">Tous les mois</option>
+                                        <option value="">Mois actuel</option>
                                         {Array.from({ length: 12 }, (_, i) => i + 1).map(mois => (
                                             <option key={mois} value={mois}>
                                                 {getMoisNom(mois)}
                                             </option>
                                         ))}
+                                        <option value="0">Tous les mois</option>
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
@@ -879,15 +1256,7 @@ function StatistiquesCamions({ camions }) {
                                     </Card.Body>
                                 </Card>
                             </Col>
-                            <Col md={3}>
-                                <Card className="text-center border-info">
-                                    <Card.Body>
-                                        <Card.Title>Dernier Mois</Card.Title>
-                                        <h3 className="text-info">{statistiques.stats_dernier_mois?.total_montant?.toFixed(2) || '0.00'} DH</h3>
-                                        <small>{statistiques.stats_dernier_mois?.nombre_charges || 0} charges</small>
-                                    </Card.Body>
-                                </Card>
-                            </Col>
+
                             <Col md={3}>
                                 <Card className="text-center border-warning">
                                     <Card.Body>
@@ -923,56 +1292,83 @@ function StatistiquesCamions({ camions }) {
                         </Row>
 
                         {/* Dernières charges */}
+                        {/* Dernières charges - MODIFIÉ POUR AFFICHER TOUTES LES CHARGES DU MOIS */}
                         <Row>
                             <Col md={12}>
                                 <Card>
-                                    <Card.Header>
-                                        <h6>📋 Dernières Charges Enregistrées</h6>
+                                    <Card.Header className="d-flex justify-content-between align-items-center">
+                                        <h6 className="mb-0">
+                                            📋 {filters.mois ? `Charges du mois de ${getMoisNom(parseInt(filters.mois))}` : 'Charges du mois en cours'}
+                                            <Badge bg="info" className="ms-2">
+                                                {statistiques.dernieres_charges?.length || 0} charges
+                                            </Badge>
+                                        </h6>
+                                        {statistiques.dernieres_charges && statistiques.dernieres_charges.length > 0 && (
+                                            <small className="text-muted">
+                                                Total: {statistiques.dernieres_charges
+                                                    .reduce((sum, charge) => sum + parseFloat(charge.montant || 0), 0)
+                                                    .toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DH
+                                            </small>
+                                        )}
                                     </Card.Header>
                                     <Card.Body>
-                                        <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                            <Table striped bordered hover size="sm">
-                                                <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}>
-                                                    <tr>
-                                                        <th>Type</th>
-                                                        <th>Catégorie</th>
-                                                        <th>Description</th>
-                                                        <th>Montant</th>
-                                                        <th>Date</th>
-                                                        <th>Camion</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {statistiques.dernieres_charges?.map((charge) => (
-                                                        <tr key={charge.id}>
-                                                            <td>
-                                                                <Badge bg={
-                                                                    charge.type_charge === 'mensuelle' ? 'primary' :
-                                                                        charge.type_charge === 'annuelle' ? 'warning' : 'info'
-                                                                }>
-                                                                    {getTypeLabel(charge.type_charge)}
-                                                                </Badge>
-                                                            </td>
-                                                            <td>{getCategorieLabel(charge.categorie)}</td>
-                                                            <td>{charge.description || '-'}</td>
-                                                            <td>
-                                                                <strong>{charge.montant} DH</strong>
-                                                            </td>
-                                                            <td>{charge.date_charge}</td>
-                                                            <td>
-                                                                <small>{charge.camion_details?.immatriculation}</small>
-                                                            </td>
+                                        {statistiques.dernieres_charges && statistiques.dernieres_charges.length > 0 ? (
+                                            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                                <Table striped bordered hover size="sm">
+                                                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 1 }}>
+                                                        <tr>
+                                                            <th>Date</th>
+                                                            {/* <th>Type</th>*/}
+                                                            <th>Catégorie</th>
+                                                            <th>Description</th>
+                                                            <th className="text-end">Montant</th>
+                                                            <th>Camion</th>
                                                         </tr>
-                                                    )) || (
-                                                            <tr>
-                                                                <td colSpan="6" className="text-center text-muted">
-                                                                    Aucune charge trouvée
-                                                                </td>
-                                                            </tr>
-                                                        )}
-                                                </tbody>
-                                            </Table>
-                                        </div>
+                                                    </thead>
+                                                    <tbody>
+                                                        {statistiques.dernieres_charges
+                                                            .sort((a, b) => new Date(b.date_charge) - new Date(a.date_charge)) // Tri décroissant par date
+                                                            .map((charge) => (
+                                                                <tr key={charge.id}>
+                                                                    <td>
+                                                                        <strong>{charge.date_charge}</strong>
+                                                                    </td>
+                                                                    {/* <td>
+                                                                        <Badge bg={
+                                                                            charge.type_charge === 'mensuelle' ? 'primary' :
+                                                                                charge.type_charge === 'annuelle' ? 'warning' : 'info'
+                                                                        }>
+                                                                            {getTypeLabel(charge.type_charge)}
+                                                                    </Badge>
+                                                                    </td>*/}
+                                                                    <td>{getCategorieLabel(charge.categorie)}</td>
+                                                                    <td>
+                                                                        {charge.description || '-'}
+                                                                        {charge.categorie === 'gazoil' && (
+                                                                            <div className="text-muted small">
+                                                                                ⛽ {charge.litres}L • {charge.kilometrage}km
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="text-end">
+                                                                        <strong className="text-primary">
+                                                                            {parseFloat(charge.montant || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                        </strong>
+                                                                    </td>
+                                                                    <td>
+                                                                        <small>{charge.camion_details?.immatriculation || 'N/A'}</small>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                    </tbody>
+                                                </Table>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center text-muted py-4">
+                                                <h5>📭 Aucune charge trouvée</h5>
+                                                <p>Aucune charge enregistrée {filters.mois ? `pour le mois de ${getMoisNom(parseInt(filters.mois))}` : 'ce mois-ci'}</p>
+                                            </div>
+                                        )}
                                     </Card.Body>
                                 </Card>
                             </Col>
@@ -1777,6 +2173,20 @@ function Camions() {
     const [selectedCamion, setSelectedCamion] = useState(null);
     const [showChargesModal, setShowChargesModal] = useState(false);
     const [showConsommationModal, setShowConsommationModal] = useState(false); // ⭐ NOUVEL ÉTAT
+    const [showActionsMenu, setShowActionsMenu] = useState(null);
+    // ⭐ AJOUTEZ CE useEffect POUR FERMER LE MENU (METTEZ-LE ICI)
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showActionsMenu && !event.target.closest('.position-relative')) {
+                setShowActionsMenu(null);
+            }
+        };
+
+        document.addEventListener('click', handleClickOutside);
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [showActionsMenu]);
 
     const [formData, setFormData] = useState({
         immatriculation: '',
@@ -1785,6 +2195,7 @@ function Camions() {
         date_mise_service: '',
         statut: 'actif'
     });
+
 
     useEffect(() => {
         fetchCamions();
@@ -1963,15 +2374,8 @@ function Camions() {
                                             </Badge>
                                         </td>
                                         <td>
-                                            <div className="btn-group" role="group">
-                                                <Button
-                                                    variant="outline-primary"
-                                                    size="sm"
-                                                    onClick={() => handleShowModal(camion)}
-                                                    title="Modifier le camion"
-                                                >
-                                                    ✏️
-                                                </Button>
+                                            <div className="d-flex gap-2 align-items-center">
+                                                {/* Bouton Charges - style simple */}
                                                 <Button
                                                     variant="outline-info"
                                                     size="sm"
@@ -1980,17 +2384,68 @@ function Camions() {
                                                         setShowChargesModal(true);
                                                     }}
                                                     title="Gérer les charges"
+                                                    className="btn-action charges d-flex align-items-center gap-1"
                                                 >
-                                                    💰 Charges
+                                                    <i className="bi bi-cash action-icon"></i>
+                                                    <span className="d-none d-md-inline">Charges</span>
                                                 </Button>
-                                                <Button
-                                                    variant="outline-danger"
-                                                    size="sm"
-                                                    onClick={() => handleDelete(camion.id)}
-                                                    title="Supprimer le camion"
-                                                >
-                                                    🗑️
-                                                </Button>
+
+                                                {/* Menu déroulant */}
+                                                <div className="position-relative">
+                                                    <Button
+                                                        variant="outline-secondary"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setShowActionsMenu(showActionsMenu === camion.id ? null : camion.id);
+                                                        }}
+                                                        title="Plus d'actions"
+                                                        className="btn-action menu"
+                                                    >
+                                                        <i className="bi bi-three-dots-vertical action-icon"></i>
+                                                    </Button>
+
+                                                    {/* Menu déroulant */}
+                                                    {showActionsMenu === camion.id && (
+                                                        <div
+                                                            className="position-absolute action-menu-dropdown"
+                                                            style={{
+                                                                top: '100%',
+                                                                right: '0',
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            {/* Option Modifier */}
+                                                            <button
+                                                                className="menu-item modifier"
+                                                                onClick={() => {
+                                                                    handleShowModal(camion);
+                                                                    setShowActionsMenu(null);
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-pencil action-icon"></i>
+                                                                Modifier
+                                                            </button>
+
+                                                            {/* Séparateur */}
+                                                            <hr className="menu-divider" />
+
+                                                            {/* Option Supprimer */}
+                                                            <button
+                                                                className="menu-item supprimer"
+                                                                onClick={() => {
+                                                                    if (window.confirm(`Supprimer le camion ${camion.immatriculation} ?`)) {
+                                                                        handleDelete(camion.id);
+                                                                        setShowActionsMenu(null);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-trash action-icon"></i>
+                                                                Supprimer
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -2147,6 +2602,254 @@ function Camions() {
                     )}
                 </Modal.Body>
             </Modal>
+            <style>{`
+        /* === STYLE SIMPLE ET CLAIR POUR LES BOUTONS === */
+
+        /* Style principal pour tous les boutons */
+        .btn-action {
+            border: 1px solid #dee2e6 !important;
+            border-radius: 4px !important;
+            font-size: 13px !important;
+            padding: 6px 12px !important;
+            transition: all 0.2s ease !important;
+            background-color: white !important;
+            color: #495057 !important;
+            font-weight: 500 !important;
+        }
+        
+        /* Bouton Charges (principal) */
+        .btn-action.charges {
+            border-color: #0d6efd !important;
+            color: #0d6efd !important;
+            background-color: rgba(13, 110, 253, 0.05) !important;
+        }
+        
+        .btn-action.charges:hover {
+            background-color: #0d6efd !important;
+            color: white !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(13, 110, 253, 0.2);
+        }
+        
+        /* Bouton menu (trois points) - RENDU PLUS PETIT */
+        .btn-action.menu {
+            border-color: #adb5bd !important;
+            color: #6c757d !important;
+            background-color: white !important;
+            width: 30px !important;
+            height: 30px !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+        }
+        
+        .btn-action.menu:hover {
+            border-color: #6c757d !important;
+            background-color: #f8f9fa !important;
+            color: #495057 !important;
+        }
+        
+        /* Menu déroulant - RENDU PLUS COMPACT ET CORRIGÉ POUR ÉVITER L'ESPACE */
+        .action-menu-dropdown {
+            background: white !important;
+            border: 1px solid #dee2e6 !important;
+            border-radius: 4px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+            min-width: 120px !important;
+            max-width: 130px !important;
+            padding: 6px !important;
+            z-index: 1050 !important;
+            /* ⭐ IMPORTANT: Pas de margin-top ici, géré dans le JSX */
+        }
+        
+        /* ⭐ CORRECTION: Menu qui s'ouvre vers le bas (par défaut) */
+        .action-menu-dropdown[data-position="bottom"] {
+            top: 100% !important;
+            bottom: auto !important;
+            margin-top: 4px !important;
+            margin-bottom: 0 !important;
+        }
+        
+        /* ⭐ CORRECTION: Menu qui s'ouvre vers le haut (pour les derniers éléments) */
+        .action-menu-dropdown[data-position="top"] {
+            top: auto !important;
+            bottom: 100% !important;
+            margin-top: 0 !important;
+            margin-bottom: 4px !important;
+        }
+        
+        /* Boutons dans le menu déroulant - PLUS COMPACTS */
+        .menu-item {
+            border: none !important;
+            background: transparent !important;
+            color: #495057 !important;
+            text-align: left !important;
+            padding: 6px 8px !important;
+            font-size: 12px !important;
+            border-radius: 3px !important;
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            transition: all 0.15s ease !important;
+            line-height: 1.2 !important;
+            cursor: pointer !important;
+        }
+        
+        .menu-item:hover {
+            background-color: #f8f9fa !important;
+            color: #212529 !important;
+        }
+        
+        .menu-item.modifier:hover {
+            background-color: rgba(13, 110, 253, 0.08) !important;
+            color: #0d6efd !important;
+        }
+        
+        .menu-item.supprimer:hover {
+            background-color: rgba(220, 53, 69, 0.08) !important;
+            color: #dc3545 !important;
+        }
+        
+        /* Séparateur - PLUS FIN */
+        .menu-divider {
+            height: 0.5px !important;
+            background-color: #e9ecef !important;
+            margin: 4px 0 !important;
+            border: none !important;
+            opacity: 0.7 !important;
+        }
+        
+        /* Icônes - PLUS PETITES */
+        .action-icon {
+            font-size: 12px !important;
+            width: 14px !important;
+            text-align: center !important;
+        }
+        
+        /* Animation d'ouverture du menu - PLUS RAPIDE */
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* ⭐ ANIMATIONS CORRECTES SELON LA POSITION */
+        .action-menu-dropdown[data-position="bottom"] {
+            animation: fadeInDown 0.15s ease-out !important;
+        }
+        
+        .action-menu-dropdown[data-position="top"] {
+            animation: fadeInUp 0.15s ease-out !important;
+        }
+        
+        /* Ajustements responsive - OPTIMISÉ */
+        @media (max-width: 768px) {
+            .btn-action {
+                padding: 4px 8px !important;
+                font-size: 11px !important;
+            }
+            
+            .btn-action .d-none {
+                display: none !important;
+            }
+            
+            .btn-action.menu {
+                width: 28px !important;
+                height: 28px !important;
+            }
+            
+            .action-menu-dropdown {
+                min-width: 110px !important;
+                padding: 4px !important;
+            }
+            
+            .menu-item {
+                padding: 5px 6px !important;
+                font-size: 11px !important;
+                gap: 5px !important;
+            }
+        }
+        
+        /* Style pour les boutons principaux de la page */
+        .btn-primary {
+            background-color: #0d6efd !important;
+            border-color: #0d6efd !important;
+            font-weight: 500 !important;
+        }
+        
+        .btn-warning {
+            background-color: #ffc107 !important;
+            border-color: #ffc107 !important;
+            color: #212529 !important;
+            font-weight: 500 !important;
+        }
+        
+        .btn-warning:hover {
+            background-color: #ffca2c !important;
+            border-color: #ffca2c !important;
+        }
+        
+        /* ⭐ IMPORTANT: Conteneur du tableau pour éviter le débordement */
+        .table-responsive {
+            position: relative;
+            max-height: 400px !important;
+            overflow-y: auto !important;
+        }
+        
+        /* ⭐ CORRECTION: S'assurer que le menu ne crée pas d'espace */
+        .position-relative {
+            position: relative !important;
+        }
+        
+        /* ⭐ Gestion des derniers éléments du tableau */
+        tbody tr {
+            position: relative;
+        }
+        
+        /* ⭐ FORCER le menu à s'ouvrir vers le haut pour les 2 derniers éléments */
+        tbody tr:nth-last-child(-n+2) .action-menu-dropdown {
+            bottom: 100% !important;
+            top: auto !important;
+            margin-top: 0 !important;
+            margin-bottom: 4px !important;
+        }
+        
+        /* ⭐ Alternative: Détection dynamique via JS */
+        .action-menu-dropdown.force-top {
+            bottom: 100% !important;
+            top: auto !important;
+            margin-top: 0 !important;
+            margin-bottom: 4px !important;
+            animation: fadeInUp 0.15s ease-out !important;
+        }
+        
+        .action-menu-dropdown.force-bottom {
+            top: 100% !important;
+            bottom: auto !important;
+            margin-top: 4px !important;
+            margin-bottom: 0 !important;
+            animation: fadeInDown 0.15s ease-out !important;
+        }
+        `}</style>
         </Container>
     );
 }

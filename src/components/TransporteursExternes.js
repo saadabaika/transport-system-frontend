@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Container, Table, Button, Spinner, Alert,
     Form, Row, Col, Card, Badge, Modal
 } from 'react-bootstrap';
 import { transporteurExterneService, trajetService } from '../services/api';
 import { jsPDF } from 'jspdf';
+
 
 function TransporteursExternes() {
     const [transporteurs, setTransporteurs] = useState([]);
@@ -19,6 +20,8 @@ function TransporteursExternes() {
     const [loadingTrajets, setLoadingTrajets] = useState(false);
     const [showEditStatutModal, setShowEditStatutModal] = useState(false);
     const [trajetAEditer, setTrajetAEditer] = useState(null);
+    const [showActionsMenu, setShowActionsMenu] = useState(null);
+    const [menuPositions, setMenuPositions] = useState({});
 
     const [formData, setFormData] = useState({
         nom: '',
@@ -38,6 +41,20 @@ function TransporteursExternes() {
     useEffect(() => {
         fetchTransporteurs();
     }, []);
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showActionsMenu &&
+                !event.target.closest('.action-menu-dropdown') &&
+                !event.target.closest('.btn-action.menu')) {
+                setShowActionsMenu(null);
+            }
+        };
+
+        document.addEventListener('click', handleClickOutside);
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [showActionsMenu]);
 
     const fetchTransporteurs = async () => {
         try {
@@ -217,6 +234,29 @@ function TransporteursExternes() {
             setSaving(false);
         }
     };
+    // ⭐ FONCTION POUR GÉRER L'OUVERTURE DU MENU AVEC DÉTECTION DE POSITION
+    const handleMenuOpen = (transporteurId, event) => {
+        event.stopPropagation();
+
+        if (showActionsMenu === transporteurId) {
+            setShowActionsMenu(null);
+            return;
+        }
+
+        const button = event.currentTarget;
+        const buttonRect = button.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - buttonRect.bottom;
+        const estimatedMenuHeight = 120;
+
+        const position = spaceBelow < estimatedMenuHeight ? 'top' : 'bottom';
+
+        setMenuPositions(prev => ({
+            ...prev,
+            [transporteurId]: position
+        }));
+
+        setShowActionsMenu(transporteurId);
+    };
 
     // ⭐ AJOUT DES FONCTIONS MANQUANTES
 
@@ -380,12 +420,10 @@ function TransporteursExternes() {
 
         yPosition = 50;
 
-        // ✅ CORRECTION ICI : Séparer l'affichage et le calcul
-        // Pour l'affichage dans les tableaux : TOUS les trajets
+        // Séparer l'affichage et le calcul
         const trajetsJeDonnePourAffichage = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_donne');
         const trajetsJeRecoisPourAffichage = trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_recois');
 
-        // ✅ CORRECTION ICI : Pour le calcul : SEULEMENT les non payés
         const trajetsJeDonnePourCalcul = trajetsTransporteur.filter(t =>
             t.type_sous_traitance === 'je_donne' && t.statut_paiement_sous_traitance !== 'paye'
         );
@@ -394,77 +432,60 @@ function TransporteursExternes() {
             t.type_sous_traitance === 'je_recois' && t.statut_paiement_sous_traitance !== 'paye'
         );
 
-        // Calculer les totaux SEULEMENT pour les trajets non payés
+        // Calculer les totaux
         const totalJeDonne = trajetsJeDonnePourCalcul.reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0);
         const totalJeRecois = trajetsJeRecoisPourCalcul.reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0);
         const soldeNet = totalJeRecois - totalJeDonne;
 
         yPosition += 25;
 
-        // Tableau des trajets "Je donne" - Afficher TOUS
+        // Tableau des trajets "Je donne"
         if (trajetsJeDonnePourAffichage.length > 0) {
-            const hauteurTableauJeDonne = 12 + (trajetsJeDonnePourAffichage.length * 10) + 20;
-            if (yPosition + hauteurTableauJeDonne > 260) {
-                doc.addPage();
-                yPosition = margin;
-            }
-
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(14);
             doc.setFont(undefined, 'bold');
             doc.text('TRAJETS "JE DONNE"', margin, yPosition);
             yPosition += 12;
 
-            doc.setFillColor(...dangerColor);
-            doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
+            // Fonction pour dessiner l'en-tête du tableau
+            const dessinerEnTeteTableauJeDonne = () => {
+                doc.setFillColor(...dangerColor);
+                doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
 
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'bold');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
 
-            const colWidthsJeDonne = [22, 35, 40, 28, 25, 20];
-            let xPosition = margin + 3;
-            doc.text('Date', xPosition, yPosition + 7);
-            xPosition += colWidthsJeDonne[0];
-            doc.text('Client', xPosition, yPosition + 7);
-            xPosition += colWidthsJeDonne[1];
-            doc.text('Destination', xPosition, yPosition + 7);
-            xPosition += colWidthsJeDonne[2];
-            doc.text('N° Cont.', xPosition, yPosition + 7);
-            xPosition += colWidthsJeDonne[3];
-            doc.text('Montant', xPosition, yPosition + 7);
-            xPosition += colWidthsJeDonne[4];
-            doc.text('Statut', xPosition, yPosition + 7);
+                const colWidthsJeDonne = [22, 35, 40, 28, 25, 20];
+                let xPosition = margin + 3;
+                doc.text('Date', xPosition, yPosition + 7);
+                xPosition += colWidthsJeDonne[0];
+                doc.text('Client', xPosition, yPosition + 7);
+                xPosition += colWidthsJeDonne[1];
+                doc.text('Destination', xPosition, yPosition + 7);
+                xPosition += colWidthsJeDonne[2];
+                doc.text('N° Cont.', xPosition, yPosition + 7);
+                xPosition += colWidthsJeDonne[3];
+                doc.text('Montant', xPosition, yPosition + 7);
+                xPosition += colWidthsJeDonne[4];
+                doc.text('Statut', xPosition, yPosition + 7);
 
-            yPosition += 12;
-            doc.setTextColor(0, 0, 0);
-            doc.setFont(undefined, 'normal');
+                yPosition += 12;
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'normal');
+            };
 
-            // ✅ Afficher TOUS les trajets
+            // Dessiner l'en-tête initial
+            dessinerEnTeteTableauJeDonne();
+
+            // Afficher TOUS les trajets
             trajetsJeDonnePourAffichage.forEach((trajet, index) => {
+                // Vérifier si on a assez d'espace pour une nouvelle ligne
                 if (yPosition > 260) {
                     doc.addPage();
                     yPosition = margin;
-                    doc.setFillColor(...dangerColor);
-                    doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFontSize(9);
-                    doc.setFont(undefined, 'bold');
-                    let xPosHeader = margin + 3;
-                    doc.text('Date', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeDonne[0];
-                    doc.text('Client', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeDonne[1];
-                    doc.text('Destination', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeDonne[2];
-                    doc.text('N° Cont.', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeDonne[3];
-                    doc.text('Montant', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeDonne[4];
-                    doc.text('Statut', xPosHeader, yPosition + 7);
-                    yPosition += 12;
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont(undefined, 'normal');
+                    // Redessiner l'en-tête sur la nouvelle page
+                    dessinerEnTeteTableauJeDonne();
                 }
 
                 if (index % 2 === 0) {
@@ -475,21 +496,21 @@ function TransporteursExternes() {
                 doc.setFontSize(8);
                 let xPos = margin + 3;
                 doc.text(trajet.date || 'N/A', xPos, yPosition + 6);
-                xPos += colWidthsJeDonne[0];
+                xPos += 22;
                 const clientNom = trajet.client_details?.nom || 'N/A';
                 const clientCourt = clientNom.length > 15 ? clientNom.substring(0, 15) + '...' : clientNom;
                 doc.text(clientCourt, xPos, yPosition + 6);
-                xPos += colWidthsJeDonne[1];
+                xPos += 35;
                 const destination = trajet.destination_details?.ville || 'N/A';
                 const destinationCourte = destination.length > 15 ? destination.substring(0, 15) + '...' : destination;
                 doc.text(destinationCourte, xPos, yPosition + 6);
-                xPos += colWidthsJeDonne[2];
+                xPos += 40;
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);
-                xPos += colWidthsJeDonne[3];
+                xPos += 28;
                 doc.setFont(undefined, 'bold');
                 doc.text(`${formatMontant(trajet.prix_sous_traitance || 0)} DH`, xPos, yPosition + 6);
                 doc.setFont(undefined, 'normal');
-                xPos += colWidthsJeDonne[4];
+                xPos += 25;
                 const statutPaiement = trajet.statut_paiement_sous_traitance || 'non_paye';
                 let statutColor = dangerColor;
                 let statutText = 'Non Payé';
@@ -512,10 +533,10 @@ function TransporteursExternes() {
             yPosition += 20;
         }
 
-        // Tableau des trajets "Je reçois" - Afficher TOUS
+        // Tableau des trajets "Je reçois"
         if (trajetsJeRecoisPourAffichage.length > 0) {
-            const hauteurTableauJeRecois = 12 + (trajetsJeRecoisPourAffichage.length * 10) + 20;
-            if (yPosition + hauteurTableauJeRecois > 260) {
+            // Vérifier si on a assez d'espace pour le titre
+            if (yPosition > 240) {
                 doc.addPage();
                 yPosition = margin;
             }
@@ -526,56 +547,45 @@ function TransporteursExternes() {
             doc.text('TRAJETS "JE REÇOIS"', margin, yPosition);
             yPosition += 12;
 
-            doc.setFillColor(...successColor);
-            doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
+            // Fonction pour dessiner l'en-tête du tableau
+            const dessinerEnTeteTableauJeRecois = () => {
+                doc.setFillColor(...successColor);
+                doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
 
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'bold');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(9);
+                doc.setFont(undefined, 'bold');
 
-            const colWidthsJeRecois = [22, 30, 35, 25, 30, 20];
-            let xPosition = margin + 3;
-            doc.text('Date', xPosition, yPosition + 7);
-            xPosition += colWidthsJeRecois[0];
-            doc.text('Client', xPosition, yPosition + 7);
-            xPosition += colWidthsJeRecois[1];
-            doc.text('Destination', xPosition, yPosition + 7);
-            xPosition += colWidthsJeRecois[2];
-            doc.text('N° Cont.', xPosition, yPosition + 7);
-            xPosition += colWidthsJeRecois[3];
-            doc.text('Montant', xPosition, yPosition + 7);
-            xPosition += colWidthsJeRecois[4];
-            doc.text('Statut', xPosition, yPosition + 7);
+                const colWidthsJeRecois = [22, 30, 35, 25, 30, 20];
+                let xPosition = margin + 3;
+                doc.text('Date', xPosition, yPosition + 7);
+                xPosition += colWidthsJeRecois[0];
+                doc.text('Client', xPosition, yPosition + 7);
+                xPosition += colWidthsJeRecois[1];
+                doc.text('Destination', xPosition, yPosition + 7);
+                xPosition += colWidthsJeRecois[2];
+                doc.text('N° Cont.', xPosition, yPosition + 7);
+                xPosition += colWidthsJeRecois[3];
+                doc.text('Montant', xPosition, yPosition + 7);
+                xPosition += colWidthsJeRecois[4];
+                doc.text('Statut', xPosition, yPosition + 7);
 
-            yPosition += 12;
-            doc.setTextColor(0, 0, 0);
-            doc.setFont(undefined, 'normal');
+                yPosition += 12;
+                doc.setTextColor(0, 0, 0);
+                doc.setFont(undefined, 'normal');
+            };
 
-            // ✅ Afficher TOUS les trajets
+            // Dessiner l'en-tête initial
+            dessinerEnTeteTableauJeRecois();
+
+            // Afficher TOUS les trajets
             trajetsJeRecoisPourAffichage.forEach((trajet, index) => {
+                // Vérifier si on a assez d'espace pour une nouvelle ligne
                 if (yPosition > 260) {
                     doc.addPage();
                     yPosition = margin;
-                    doc.setFillColor(...successColor);
-                    doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 10, 2, 2, 'F');
-                    doc.setTextColor(255, 255, 255);
-                    doc.setFontSize(9);
-                    doc.setFont(undefined, 'bold');
-                    let xPosHeader = margin + 3;
-                    doc.text('Date', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeRecois[0];
-                    doc.text('Client', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeRecois[1];
-                    doc.text('Destination', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeRecois[2];
-                    doc.text('N° Cont.', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeRecois[3];
-                    doc.text('Montant', xPosHeader, yPosition + 7);
-                    xPosHeader += colWidthsJeRecois[4];
-                    doc.text('Statut', xPosHeader, yPosition + 7);
-                    yPosition += 12;
-                    doc.setTextColor(0, 0, 0);
-                    doc.setFont(undefined, 'normal');
+                    // Redessiner l'en-tête sur la nouvelle page
+                    dessinerEnTeteTableauJeRecois();
                 }
 
                 if (index % 2 === 0) {
@@ -586,21 +596,21 @@ function TransporteursExternes() {
                 doc.setFontSize(8);
                 let xPos = margin + 3;
                 doc.text(trajet.date || 'N/A', xPos, yPosition + 6);
-                xPos += colWidthsJeRecois[0];
+                xPos += 22;
                 const clientNom = trajet.client_details?.nom || 'N/A';
                 const clientCourt = clientNom.length > 12 ? clientNom.substring(0, 12) + '...' : clientNom;
                 doc.text(clientCourt, xPos, yPosition + 6);
-                xPos += colWidthsJeRecois[1];
+                xPos += 30;
                 const destination = trajet.destination_details?.ville || 'N/A';
                 const destinationCourte = destination.length > 12 ? destination.substring(0, 12) + '...' : destination;
                 doc.text(destinationCourte, xPos, yPosition + 6);
-                xPos += colWidthsJeRecois[2];
+                xPos += 35;
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);
-                xPos += colWidthsJeRecois[3];
+                xPos += 25;
                 doc.setFont(undefined, 'bold');
                 doc.text(`${formatMontant(trajet.prix_trajet || 0)} DH`, xPos, yPosition + 6);
                 doc.setFont(undefined, 'normal');
-                xPos += colWidthsJeRecois[4];
+                xPos += 30;
                 const statutPaiement = trajet.statut_paiement_sous_traitance || 'non_paye';
                 let statutColor = dangerColor;
                 let statutText = 'Non Payé';
@@ -623,6 +633,7 @@ function TransporteursExternes() {
             yPosition += 20;
         }
 
+        // Résumé financier
         if (yPosition > 200) {
             doc.addPage();
             yPosition = margin;
@@ -642,18 +653,15 @@ function TransporteursExternes() {
         doc.text(`Total trajets "Je reçois": ${trajetsJeRecoisPourAffichage.length} trajet${trajetsJeRecoisPourAffichage.length > 1 ? 's' : ''}`, margin + 15, yPosition + 38);
 
         doc.setFont(undefined, 'bold');
-        // ✅ CORRECTION : Utiliser les totaux CALCULÉS (non payés seulement)
         doc.text(`Total à payer : ${formatMontant(totalJeDonne)} DH`, pageWidth - margin - 10, yPosition + 28, { align: 'right' });
         doc.text(`Total à recevoir : ${formatMontant(totalJeRecois)} DH`, pageWidth - margin - 10, yPosition + 38, { align: 'right' });
-
 
         yPosition += 65;
 
         doc.setFontSize(16);
         doc.setFont(undefined, 'bold');
-        doc.setFont("helvetica", "bold");
 
-        // ✅ CORRECTION : Afficher le solde basé sur les non payés
+        // Afficher le solde
         if (soldeNet >= 0) {
             doc.setTextColor(...successColor);
             doc.text(`SOLDE À RECEVOIR: ${formatMontant(soldeNet)} DH`, pageWidth / 2, yPosition, { align: 'center' });
@@ -662,6 +670,7 @@ function TransporteursExternes() {
             doc.text(`SOLDE À PAYER: ${formatMontant(Math.abs(soldeNet))} DH`, pageWidth / 2, yPosition, { align: 'center' });
         }
 
+        // Pied de page pour toutes les pages
         const pageCount = doc.internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
             doc.setPage(i);
@@ -679,16 +688,7 @@ function TransporteursExternes() {
     };
 
     // Calcul des statistiques
-    const statsTrajets = {
-        totalJeDonne: trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_donne').length,
-        totalJeRecois: trajetsTransporteur.filter(t => t.type_sous_traitance === 'je_recois').length,
-        montantJeDonne: trajetsTransporteur
-            .filter(t => t.type_sous_traitance === 'je_donne')
-            .reduce((sum, t) => sum + parseFloat(t.prix_sous_traitance || 0), 0),
-        montantJeRecois: trajetsTransporteur
-            .filter(t => t.type_sous_traitance === 'je_recois')
-            .reduce((sum, t) => sum + parseFloat(t.prix_trajet || 0), 0)
-    };
+
 
     if (loading) {
         return (
@@ -859,28 +859,98 @@ function TransporteursExternes() {
                                         </Badge>
                                     </td>
                                     <td>
-                                        <div className="btn-group">
+                                        <div className="d-flex gap-2 align-items-center">
+                                            {/* Bouton Situation */}
                                             <Button
                                                 variant="outline-info"
                                                 size="sm"
                                                 onClick={() => handleShowDetails(transporteur)}
+                                                title="Voir la situation"
+                                                className="btn-action details d-flex align-items-center gap-1"
                                             >
-                                                📊 Situation
+                                                <i className="bi bi-graph-up action-icon"></i>
+                                                <span className="d-none d-md-inline">Situation</span>
                                             </Button>
-                                            <Button
-                                                variant="outline-primary"
-                                                size="sm"
-                                                onClick={() => handleShowForm(transporteur)}
-                                            >
-                                                ✏️
-                                            </Button>
-                                            <Button
-                                                variant="outline-danger"
-                                                size="sm"
-                                                onClick={() => handleDelete(transporteur.id)}
-                                            >
-                                                🗑️
-                                            </Button>
+
+                                            {/* Menu déroulant pour Modifier/Supprimer */}
+                                            <div className="position-relative">
+                                                <Button
+                                                    variant="outline-secondary"
+                                                    size="sm"
+                                                    onClick={(e) => handleMenuOpen(transporteur.id, e)}
+                                                    title="Plus d'actions"
+                                                    className="btn-action menu"
+                                                >
+                                                    <i className="bi bi-three-dots-vertical action-icon"></i>
+                                                </Button>
+
+                                                {/* Menu déroulant avec position intelligente */}
+                                                {showActionsMenu === transporteur.id && (
+                                                    <div
+                                                        className={`position-absolute action-menu-dropdown ${menuPositions[transporteur.id] === 'top' ? 'position-top' : ''
+                                                            }`}
+                                                        style={{
+                                                            right: '0',
+                                                            zIndex: 1050,
+                                                            minWidth: '150px',
+                                                            backgroundColor: 'white',
+                                                            border: '1px solid #dee2e6',
+                                                            borderRadius: '4px',
+                                                            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                                                            ...(menuPositions[transporteur.id] === 'top'
+                                                                ? { bottom: '100%', marginBottom: '5px', top: 'auto' }
+                                                                : { top: '100%', marginTop: '5px', bottom: 'auto' }
+                                                            )
+                                                        }}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {/* Option Modifier */}
+                                                        <button
+                                                            className="menu-item modifier w-100 text-start px-3 py-2 border-0 bg-transparent"
+                                                            style={{
+                                                                cursor: 'pointer',
+                                                                transition: 'background-color 0.2s',
+                                                                color: '#007bff'
+                                                            }}
+                                                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                                                            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleShowForm(transporteur);
+                                                                setShowActionsMenu(null);
+                                                            }}
+                                                        >
+                                                            <i className="bi bi-pencil me-2"></i>
+                                                            Modifier
+                                                        </button>
+
+                                                        {/* Séparateur */}
+                                                        <hr className="menu-divider my-1" />
+
+                                                        {/* Option Supprimer */}
+                                                        <button
+                                                            className="menu-item supprimer w-100 text-start px-3 py-2 border-0 bg-transparent"
+                                                            style={{
+                                                                cursor: 'pointer',
+                                                                transition: 'background-color 0.2s',
+                                                                color: '#dc3545'
+                                                            }}
+                                                            onMouseEnter={(e) => e.target.style.backgroundColor = '#f8f9fa'}
+                                                            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (window.confirm(`Êtes-vous sûr de vouloir supprimer le transporteur ${transporteur.nom} ?`)) {
+                                                                    handleDelete(transporteur.id);
+                                                                    setShowActionsMenu(null);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <i className="bi bi-trash me-2"></i>
+                                                            Supprimer
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>

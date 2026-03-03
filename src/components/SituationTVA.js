@@ -290,7 +290,7 @@ function SituationTVA() {
     };
 
     const genererPDF = () => {
-        const doc = new jsPDF();
+        const doc = new jsPDF('portrait');
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
@@ -336,57 +336,7 @@ function SituationTVA() {
         // Déterminer l'entreprise sélectionnée
         const entrepriseSelectionnee = entreprises.find(e => e.value === filtres.entreprise);
 
-        // URLs des logos avec les bons chemins
-        const logos = {
-            'ars_distribution': '/images/logos/ars_distribution.png',
-            'arn_logistique': '/images/logos/arn_logistique.png'
-        };
-
-        const genererPageAvecLogo = async (pageNum) => {
-            doc.setPage(pageNum);
-
-            try {
-                // Charger le logo selon l'entreprise
-                const logoUrl = logos[filtres.entreprise];
-                const img = new Image();
-                img.crossOrigin = 'Anonymous';
-
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = logoUrl;
-                });
-
-                // Ajouter le logo
-                const logoWidth = 35;
-                const logoHeight = 35;
-                doc.addImage(img, 'PNG', 20, 15, logoWidth, logoHeight);
-
-            } catch (error) {
-                console.warn('Logo non chargé:', error);
-                // Fallback avec texte
-                doc.setFontSize(14);
-                doc.setTextColor(...primaryColor);
-                doc.setFont('helvetica', 'bold');
-                doc.text(entrepriseSelectionnee?.label || 'ENTREPRISE', 20, 30);
-            }
-
-            // En-tête principal
-            doc.setFontSize(18);
-            doc.setTextColor(...secondaryColor);
-            doc.setFont('helvetica', 'bold');
-            doc.text('SITUATION TVA', pageWidth / 2, 25, { align: 'center' });
-
-            // Informations de période
-            doc.setFontSize(9);
-            doc.setTextColor(100, 100, 100);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Période: ${mois.find(m => m.value === parseInt(filtres.mois))?.label} ${filtres.annee}`, pageWidth / 2, 32, { align: 'center' });
-            doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, pageWidth / 2, 37, { align: 'center' });
-
-            return 45; // Retourne la position Y de départ du contenu
-        };
-
+        // Fonction pour générer le pied de page
         const genererPiedDePage = (pageNum, totalPages) => {
             doc.setPage(pageNum);
 
@@ -416,93 +366,64 @@ function SituationTVA() {
             doc.text(`Page ${pageNum}/${totalPages}`, pageWidth / 2, pageHeight - 5, { align: 'center' });
         };
 
-
-        const genererTableauOperations = (startY) => {
-            let yPosition = startY;
-            yPosition += 10;
-            // Titre section
-            doc.setFontSize(12);
+        // Fonction pour générer l'en-tête de page
+        const genererEnTetePage = (yPosition) => {
+            doc.setFontSize(18);
             doc.setTextColor(...secondaryColor);
             doc.setFont('helvetica', 'bold');
-            doc.text('DÉTAIL DES OPÉRATIONS', 20, yPosition);
-            yPosition += 8;
+            doc.text('SITUATION TVA', pageWidth / 2, yPosition, { align: 'center' });
 
-            // Configuration des colonnes avec largeurs ajustées
+            // Informations de période
+            doc.setFontSize(9);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Période: ${mois.find(m => m.value === parseInt(filtres.mois))?.label} ${filtres.annee}`, pageWidth / 2, yPosition + 7, { align: 'center' });
+            doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, pageWidth / 2, yPosition + 14, { align: 'center' });
+
+            return yPosition + 25;
+        };
+
+        // Fonction pour générer le tableau des opérations avec pagination automatique
+        const genererTableauOperations = () => {
+            let pageNum = 1;
+            let yPosition = 30; // Position Y initiale sur la page
+            let operationIndex = 0;
+            let tableauCommence = false;
+
+            // Configuration des colonnes
             const colonnes = [
-                { header: 'Date', dataKey: 'date_operation', width: 18 },
-                { header: 'Type', dataKey: 'type_operation', width: 16 },
-                { header: 'Libellé', dataKey: 'libelle', width: 50 },
-                { header: 'Catégorie', dataKey: 'categorie', width: 30 },
-                { header: 'HT (DH)', dataKey: 'montant_ht', width: 22, align: 'right' },
-                { header: 'TVA (DH)', dataKey: 'montant_tva', width: 22, align: 'right' },
-                { header: 'TTC (DH)', dataKey: 'montant_ttc', width: 22, align: 'right' }
+                { header: 'Date', dataKey: 'date_operation', width: 20 },
+                { header: 'Type', dataKey: 'type_operation', width: 18 },
+                { header: 'Libellé', dataKey: 'libelle', width: 45 },
+                { header: 'Catégorie', dataKey: 'categorie', width: 28 },
+                { header: 'HT (DH)', dataKey: 'montant_ht', width: 25, align: 'right' },
+                { header: 'TVA (DH)', dataKey: 'montant_tva', width: 25, align: 'right' },
+                { header: 'TTC (DH)', dataKey: 'montant_ttc', width: 25, align: 'right' }
             ];
 
-            // Vérifier que la largeur totale ne dépasse pas la page
-            const largeurTotale = colonnes.reduce((sum, col) => sum + col.width, 0);
-            const margeTableau = 14;
+            const margeTableau = 10;
+            const hauteurLigneBase = 8;
 
-            if (largeurTotale > pageWidth - 2 * margeTableau) {
-                // Ajuster automatiquement les largeurs si nécessaire
-                const ratio = (pageWidth - 2 * margeTableau) / largeurTotale;
-                colonnes.forEach(col => {
-                    col.width *= ratio;
-                });
-            }
+            while (operationIndex < operations.length) {
+                // Si nouvelle page, ajouter en-tête
+                if (yPosition === 30) {
+                    yPosition = genererEnTetePage(yPosition);
 
-            // En-tête du tableau
-            doc.setFillColor(...primaryColor);
-            doc.rect(margeTableau, yPosition, pageWidth - 2 * margeTableau, 8, 'F');
-            doc.setFontSize(8);
-            doc.setTextColor(255, 255, 255);
-            doc.setFont('helvetica', 'bold');
+                    // Titre section
+                    doc.setFontSize(12);
+                    doc.setTextColor(...secondaryColor);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('DÉTAIL DES OPÉRATIONS', margeTableau, yPosition);
+                    yPosition += 8;
 
-            let xPosition = margeTableau + 2;
-            colonnes.forEach(colonne => {
-                if (colonne.align === 'right') {
-                    doc.text(colonne.header, xPosition + colonne.width - 4, yPosition + 5.5, { align: 'right' });
-                } else {
-                    doc.text(colonne.header, xPosition, yPosition + 5.5);
-                }
-                xPosition += colonne.width;
-            });
-
-            yPosition += 10;
-
-            // Lignes du tableau
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'normal');
-
-            operations.forEach((operation, index) => {
-                // Calculer la hauteur nécessaire pour cette ligne
-                let hauteurLigne = 8; // Hauteur de base
-
-                // Vérifier la hauteur pour le libellé
-                const libelleLignes = diviserTexte(operation.libelle, colonnes[2].width - 4);
-                const hauteurLibelle = libelleLignes.length * 3;
-
-                // Vérifier la hauteur pour la catégorie
-                const categorieTexte = operation.categorie.replace(/_/g, ' ');
-                const categorieLignes = diviserTexte(categorieTexte, colonnes[3].width - 4);
-                const hauteurCategorie = categorieLignes.length * 3;
-
-                // Prendre la plus grande hauteur
-                hauteurLigne = Math.max(hauteurLigne, hauteurLibelle, hauteurCategorie);
-
-                // Vérifier si on doit changer de page
-                if (yPosition + hauteurLigne > pageHeight - 60) {
-                    doc.addPage();
-                    genererPiedDePage(doc.internal.getNumberOfPages(), 0);
-                    yPosition = 45;
-
-                    // Réafficher l'en-tête du tableau sur la nouvelle page
+                    // En-tête du tableau
                     doc.setFillColor(...primaryColor);
                     doc.rect(margeTableau, yPosition, pageWidth - 2 * margeTableau, 8, 'F');
                     doc.setFontSize(8);
                     doc.setTextColor(255, 255, 255);
                     doc.setFont('helvetica', 'bold');
 
-                    xPosition = margeTableau + 2;
+                    let xPosition = margeTableau + 2;
                     colonnes.forEach(colonne => {
                         if (colonne.align === 'right') {
                             doc.text(colonne.header, xPosition + colonne.width - 4, yPosition + 5.5, { align: 'right' });
@@ -511,78 +432,125 @@ function SituationTVA() {
                         }
                         xPosition += colonne.width;
                     });
+
                     yPosition += 10;
+                    tableauCommence = true;
+                }
+
+                // Afficher les opérations jusqu'à ce qu'on manque d'espace
+                while (operationIndex < operations.length) {
+                    const operation = operations[operationIndex];
+
+                    // Calculer la hauteur nécessaire pour cette ligne
+                    let hauteurLigne = hauteurLigneBase;
+
+                    // Vérifier la hauteur pour le libellé
+                    const libelleLignes = diviserTexte(operation.libelle, colonnes[2].width - 4);
+                    const hauteurLibelle = Math.max(3, libelleLignes.length * 3);
+
+                    // Vérifier la hauteur pour la catégorie
+                    const categorieTexte = operation.categorie.replace(/_/g, ' ');
+                    const categorieLignes = diviserTexte(categorieTexte, colonnes[3].width - 4);
+                    const hauteurCategorie = Math.max(3, categorieLignes.length * 3);
+
+                    // Prendre la plus grande hauteur
+                    hauteurLigne = Math.max(hauteurLigne, hauteurLibelle, hauteurCategorie);
+
+                    // Vérifier si on a assez d'espace sur cette page
+                    if (yPosition + hauteurLigne > pageHeight - 40) {
+                        // Ajouter pied de page à cette page
+                        genererPiedDePage(pageNum, 0);
+
+                        // Créer nouvelle page
+                        doc.addPage();
+                        pageNum++;
+                        yPosition = 30;
+                        tableauCommence = false;
+                        break; // Sortir de la boucle pour recommencer sur nouvelle page
+                    }
+
+                    // Fond alterné pour les lignes
+                    if (operationIndex % 2 === 0) {
+                        doc.setFillColor(248, 249, 250);
+                        doc.rect(margeTableau, yPosition - 2, pageWidth - 2 * margeTableau, hauteurLigne, 'F');
+                    }
+
+                    let currentY = yPosition;
+                    let xPosition = margeTableau + 2;
+
+                    // Date
                     doc.setFontSize(7);
+                    doc.setTextColor(...secondaryColor);
                     doc.setFont('helvetica', 'normal');
+                    doc.text(operation.date_operation, xPosition, currentY + 3);
+                    xPosition += colonnes[0].width;
+
+                    // Type
+                    const typeColor = operation.type_operation === 'credit' ? successColor : dangerColor;
+                    doc.setTextColor(...typeColor);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(operation.type_operation === 'credit' ? 'CREDIT' : 'DEBIT', xPosition, currentY + 3);
+                    doc.setFont('helvetica', 'normal');
+                    xPosition += colonnes[1].width;
+
+                    // Libellé
+                    doc.setTextColor(...secondaryColor);
+                    const libelleLignesFinal = diviserTexte(operation.libelle, colonnes[2].width - 4);
+                    libelleLignesFinal.forEach((ligne, ligneIndex) => {
+                        doc.text(ligne, xPosition, currentY + 3 + (ligneIndex * 3));
+                    });
+                    xPosition += colonnes[2].width;
+
+                    // Catégorie
+                    const categorieTexteFinal = operation.categorie.replace(/_/g, ' ');
+                    const categorieLignesFinal = diviserTexte(categorieTexteFinal, colonnes[3].width - 4);
+                    categorieLignesFinal.forEach((ligne, ligneIndex) => {
+                        doc.text(ligne, xPosition, currentY + 3 + (ligneIndex * 3));
+                    });
+                    xPosition += colonnes[3].width;
+
+                    // Montants HT
+                    doc.setTextColor(...secondaryColor);
+                    doc.text(formatNombre(operation.montant_ht), xPosition + colonnes[4].width - 4, currentY + 3, { align: 'right' });
+                    xPosition += colonnes[4].width;
+
+                    // Montants TVA
+                    doc.text(formatNombre(operation.montant_tva), xPosition + colonnes[5].width - 4, currentY + 3, { align: 'right' });
+                    xPosition += colonnes[5].width;
+
+                    // Montants TTC
+                    doc.setFont('helvetica', 'bold');
+                    const montantColor = operation.type_operation === 'credit' ? successColor : dangerColor;
+                    doc.setTextColor(...montantColor);
+                    doc.text(formatNombre(operation.montant_ttc), xPosition + colonnes[6].width - 4, currentY + 3, { align: 'right' });
+                    doc.setFont('helvetica', 'normal');
+
+                    // Ligne séparatrice
+                    doc.setDrawColor(230, 230, 230);
+                    doc.setLineWidth(0.1);
+                    doc.line(margeTableau, yPosition + hauteurLigne - 1, pageWidth - margeTableau, yPosition + hauteurLigne - 1);
+
+                    yPosition += hauteurLigne + 1;
+                    operationIndex++;
                 }
+            }
 
-                // Fond alterné pour les lignes
-                if (index % 2 === 0) {
-                    doc.setFillColor(248, 249, 250);
-                    doc.rect(margeTableau, yPosition, pageWidth - 2 * margeTableau, hauteurLigne, 'F');
-                }
-
-                let currentY = yPosition;
-                xPosition = margeTableau + 2;
-
-                // Date (sur une seule ligne)
-                doc.setTextColor(...secondaryColor);
-                doc.text(operation.date_operation, xPosition, currentY + 3);
-                xPosition += colonnes[0].width;
-
-                // Type avec couleur discrète (sur une seule ligne)
-                const typeColor = operation.type_operation === 'credit' ? successColor : dangerColor;
-                doc.setTextColor(...typeColor);
-                doc.setFont('helvetica', 'bold');
-                doc.text(operation.type_operation === 'credit' ? 'CREDIT' : 'DEBIT', xPosition, currentY + 3);
-                doc.setFont('helvetica', 'normal');
-                xPosition += colonnes[1].width;
-
-                // Libellé (avec saut de ligne automatique)
-                doc.setTextColor(...secondaryColor);
-                const libelleLignesFinal = diviserTexte(operation.libelle, colonnes[2].width - 4);
-                libelleLignesFinal.forEach((ligne, ligneIndex) => {
-                    doc.text(ligne, xPosition, currentY + 3 + (ligneIndex * 3));
-                });
-                xPosition += colonnes[2].width;
-
-                // Catégorie (avec saut de ligne automatique)
-                const categorieTexteFinal = operation.categorie.replace(/_/g, ' ');
-                const categorieLignesFinal = diviserTexte(categorieTexteFinal, colonnes[3].width - 4);
-                categorieLignesFinal.forEach((ligne, ligneIndex) => {
-                    doc.text(ligne, xPosition, currentY + 3 + (ligneIndex * 3));
-                });
-                xPosition += colonnes[3].width;
-
-                // Montants HT
-                doc.setTextColor(...secondaryColor);
-                doc.text(formatNombre(operation.montant_ht), xPosition + colonnes[4].width - 4, currentY + 3, { align: 'right' });
-                xPosition += colonnes[4].width;
-
-                // Montants TVA
-                doc.text(formatNombre(operation.montant_tva), xPosition + colonnes[5].width - 4, currentY + 3, { align: 'right' });
-                xPosition += colonnes[5].width;
-
-                // Montants TTC avec couleur selon le type
-                doc.setFont('helvetica', 'bold');
-                const montantColor = operation.type_operation === 'credit' ? successColor : dangerColor;
-                doc.setTextColor(...montantColor);
-                doc.text(formatNombre(operation.montant_ttc), xPosition + colonnes[6].width - 4, currentY + 3, { align: 'right' });
-                doc.setFont('helvetica', 'normal');
-
-                // Ligne séparatrice discrète
-                doc.setDrawColor(230, 230, 230);
-                doc.setLineWidth(0.1);
-                doc.line(margeTableau, yPosition + hauteurLigne, pageWidth - margeTableau, yPosition + hauteurLigne);
-
-                yPosition += hauteurLigne + 1;
-            });
-
-            return yPosition + 15;
+            return { pageNum, yPosition };
         };
 
-        const genererTotauxFinanciers = (startY) => {
+        // Fonction pour générer les totaux financiers
+        const genererTotauxFinanciers = (pageNum, startY) => {
+            doc.setPage(pageNum);
             let yPosition = startY;
+
+            // Vérifier si on a assez d'espace sur cette page
+            if (yPosition > pageHeight - 80) {
+                doc.addPage();
+                pageNum++;
+                yPosition = 30;
+                genererEnTetePage(yPosition);
+                yPosition += 15;
+            }
 
             // Titre section
             doc.setFontSize(12);
@@ -591,7 +559,7 @@ function SituationTVA() {
             doc.text('TOTAUX FINANCIERS', 20, yPosition);
             yPosition += 8;
 
-            // Tableau des totaux - design professionnel simple
+            // Tableau des totaux
             const largeurColonne = (pageWidth - 40) / 2;
 
             // En-tête
@@ -624,7 +592,7 @@ function SituationTVA() {
 
             yPosition += 10;
 
-            // Solde Net - design professionnel
+            // Solde Net
             const soldeColor = stats.solde_net >= 0 ? successColor : dangerColor;
             const soldeTexte = stats.solde_net >= 0 ? 'BÉNÉFICE NET' : 'PERTE NETTE';
 
@@ -637,11 +605,22 @@ function SituationTVA() {
             doc.text(soldeTexte, 25, yPosition + 5.5);
             doc.text(formatNombre(Math.abs(stats.solde_net)) + ' DH', pageWidth - 25, yPosition + 5.5, { align: 'right' });
 
-            return yPosition + 15;
+            return { pageNum, yPosition: yPosition + 15 };
         };
 
-        const genererResumeTVA = (startY) => {
+        // Fonction pour générer le résumé TVA
+        const genererResumeTVA = (pageNum, startY) => {
+            doc.setPage(pageNum);
             let yPosition = startY;
+
+            // Vérifier si on a assez d'espace sur cette page
+            if (yPosition > pageHeight - 80) {
+                doc.addPage();
+                pageNum++;
+                yPosition = 30;
+                genererEnTetePage(yPosition);
+                yPosition += 15;
+            }
 
             // Titre section
             doc.setFontSize(12);
@@ -650,7 +629,7 @@ function SituationTVA() {
             doc.text('CALCUL TVA', 20, yPosition);
             yPosition += 8;
 
-            // Tableau TVA - design professionnel simple
+            // Tableau TVA
             const largeurColonne = (pageWidth - 40) / 2;
 
             // En-tête
@@ -675,7 +654,7 @@ function SituationTVA() {
 
             yPosition += 10;
 
-            // TVA Nette - design professionnel
+            // TVA Nette
             const tvaNetteColor = stats.tva_nette >= 0 ? successColor : dangerColor;
             const tvaNetteTexte = stats.tva_nette >= 0 ? 'TVA NETTE À PAYER' : 'CRÉDIT DE TVA';
 
@@ -688,48 +667,28 @@ function SituationTVA() {
             doc.text(tvaNetteTexte, 25, yPosition + 5.5);
             doc.text(formatNombre(Math.abs(stats.tva_nette)) + ' DH', pageWidth - 25, yPosition + 5.5, { align: 'right' });
 
-            return yPosition + 15;
+            return pageNum;
         };
 
-        // Génération du PDF
-        const genererPDFComplet = async () => {
-            try {
-                // Page 1
-                let yPosition = await genererPageAvecLogo(1);
+        // === GÉNÉRATION DU PDF ===
 
-                // 1. Tableau des opérations (PREMIER comme demandé)
-                yPosition = genererTableauOperations(yPosition);
+        // 1. Tableau des opérations (avec pagination automatique)
+        const { pageNum, yPosition } = genererTableauOperations();
 
-                // 2. Totaux financiers (DEUXIÈME)
-                yPosition = genererTotauxFinanciers(yPosition + 10);
+        // 2. Totaux financiers
+        const totauxResult = genererTotauxFinanciers(pageNum, yPosition + 20);
 
-                // 3. Résumé TVA (TROISIÈME et DERNIER)
-                yPosition = genererResumeTVA(yPosition + 10);
+        // 3. Résumé TVA (dernier)
+        const finalPageNum = genererResumeTVA(totauxResult.pageNum, totauxResult.yPosition + 20);
 
-                // Ajouter les pieds de page sur toutes les pages
-                const totalPages = doc.internal.getNumberOfPages();
-                for (let i = 1; i <= totalPages; i++) {
-                    genererPiedDePage(i, totalPages);
-                }
+        // Ajouter les pieds de page sur toutes les pages
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            genererPiedDePage(i, totalPages);
+        }
 
-                // Sauvegarder le PDF
-                doc.save(`situation-tva-${filtres.entreprise}-${filtres.mois}-${filtres.annee}.pdf`);
-
-            } catch (error) {
-                console.error('Erreur lors de la génération du PDF:', error);
-                // Fallback simple sans logo
-                const docFallback = new jsPDF();
-                docFallback.setFontSize(16);
-                docFallback.text('SITUATION TVA', 20, 20);
-                docFallback.setFontSize(10);
-                docFallback.text(`Entreprise: ${entrepriseSelectionnee?.label}`, 20, 30);
-                docFallback.text(`Période: ${mois.find(m => m.value === parseInt(filtres.mois))?.label} ${filtres.annee}`, 20, 35);
-                docFallback.save(`situation-tva-${filtres.entreprise}-${filtres.mois}-${filtres.annee}.pdf`);
-            }
-        };
-
-        // Lancer la génération
-        genererPDFComplet();
+        // Sauvegarder le PDF
+        doc.save(`situation-tva-${filtres.entreprise}-${filtres.mois}-${filtres.annee}.pdf`);
     };
 
     const getTypeBadge = (type) => type === 'credit' ? 'success' : 'danger';
