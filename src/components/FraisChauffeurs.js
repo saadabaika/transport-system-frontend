@@ -201,8 +201,8 @@ function FraisChauffeurs() {
             chauffeurRapport.id,
             rapportDates.date_debut,
             rapportDates.date_fin
-        );
-
+        ).sort((a, b) => new Date(a.date) - new Date(b.date));
+        
         if (trajetsChauffeur.length === 0) {
             alert('Aucun trajet trouvé pour cette période');
             return;

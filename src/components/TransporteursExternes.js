@@ -502,7 +502,7 @@ function TransporteursExternes() {
                 doc.text(clientCourt, xPos, yPosition + 6);
                 xPos += 35;
                 const destination = trajet.destination_details?.ville || 'N/A';
-                const destinationCourte = destination.length > 15 ? destination.substring(0, 15) + '...' : destination;
+                const destinationCourte = destination.length > 23 ? destination.substring(0, 23) + '...' : destination;
                 doc.text(destinationCourte, xPos, yPosition + 6);
                 xPos += 40;
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);
@@ -602,7 +602,7 @@ function TransporteursExternes() {
                 doc.text(clientCourt, xPos, yPosition + 6);
                 xPos += 30;
                 const destination = trajet.destination_details?.ville || 'N/A';
-                const destinationCourte = destination.length > 12 ? destination.substring(0, 12) + '...' : destination;
+                const destinationCourte = destination.length > 23 ? destination.substring(0, 23) + '...' : destination;
                 doc.text(destinationCourte, xPos, yPosition + 6);
                 xPos += 35;
                 doc.text(trajet.numeros_conteneurs || trajet.n_conteneurs?.toString() || 'N/A', xPos, yPosition + 6);

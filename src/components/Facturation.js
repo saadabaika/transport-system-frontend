@@ -32,7 +32,8 @@ function Facturation() {
         entreprise: '',
         statut: '',
         dateDebut: '',
-        dateFin: ''
+        dateFin: '',
+        searchNote: ''
     });
 
     const [formData, setFormData] = useState({
@@ -121,6 +122,13 @@ function Facturation() {
         if (filtres.dateFin) {
             facturesFiltrees = facturesFiltrees.filter(facture =>
                 new Date(facture.date_facture) <= new Date(filtres.dateFin)
+            );
+        }
+        // ⭐ AJOUT : Filtre par recherche dans les notes
+        if (filtres.searchNote && filtres.searchNote.trim()) {
+            const searchTerm = filtres.searchNote.trim().toLowerCase();
+            facturesFiltrees = facturesFiltrees.filter(facture =>
+                facture.notes && facture.notes.toLowerCase().includes(searchTerm)
             );
         }
 
@@ -797,6 +805,7 @@ function Facturation() {
             {error && <Alert variant="danger" onClose={() => setError('')} dismissible>{error}</Alert>}
 
             {/* Section des filtres */}
+            {/* Section des filtres */}
             <Card className="mb-4">
                 <Card.Header>
                     <h5 className="mb-0">🔍 Filtres de recherche</h5>
@@ -877,9 +886,26 @@ function Facturation() {
                             </Button>
                         </Col>
                     </Row>
-                    <div className="text-muted small">
-                        {facturesFiltrees.length} facture(s) trouvée(s) sur {factures.length} au total
-                    </div>
+
+                    {/* ⭐ NOUVELLE LIGNE POUR LA RECHERCHE PAR NOTE */}
+                    <Row>
+                        <Col md={3}>
+                            <Form.Group className="mb-3">
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Ex: DUM 87956T"
+                                    value={filtres.searchNote}
+                                    onChange={(e) => handleFiltreChange('searchNote', e.target.value)}
+                                />
+
+                            </Form.Group>
+                        </Col>
+                        <Col md={6} className="d-flex align-items-end">
+                            <div className="text-muted small">
+                                {facturesFiltrees.length} facture(s) trouvée(s) sur {factures.length} au total
+                            </div>
+                        </Col>
+                    </Row>
                 </Card.Body>
             </Card>
 
@@ -908,6 +934,15 @@ function Facturation() {
                                                         selectedFacture.statut === 'payee' ? 'Payée' : 'Annulée'}
                                             </Badge>
                                         </p>
+                                        {/* ⭐ AJOUT DE LA NOTE */}
+                                        {selectedFacture.notes && (
+                                            <div className="mt-2 p-2 bg-light rounded border">
+
+                                                <p className="mb-0 mt-1" style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
+                                                    {selectedFacture.notes}
+                                                </p>
+                                            </div>
+                                        )}
                                     </Card.Body>
                                 </Card>
                             </Col>

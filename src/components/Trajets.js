@@ -723,7 +723,7 @@ function Trajets() {
                                     <th width="150">Destination</th>
                                     <th width="120">Sous-traitance</th>
                                     <th width="100">Transporteur</th>
-                                    <th width="100">Service</th>
+                                    {/*<th width="100">Service</th>*/}
                                     <th width="120">Camion</th>
                                     <th width="120">Conteneurs</th>
                                     <th width="120">Prix Trajet</th>
@@ -748,7 +748,7 @@ function Trajets() {
                                             <td>{trajet.destination_details?.ville || `Destination ${trajet.destination}`}</td>
                                             <td><Badge bg={sousTraitance.bg}>{sousTraitance.text}</Badge></td>
                                             <td>{trajet.transporteur_externe_details?.nom || '-'}</td>
-                                            <td><Badge bg={getServiceBadge(trajet.type_service)}>{trajet.type_service === 'ars_distribution' ? 'ARS Dist' : 'ARN Log'}</Badge></td>
+                                          {/*  <td><Badge bg={getServiceBadge(trajet.type_service)}>{trajet.type_service === 'ars_distribution' ? 'ARS Dist' : 'ARN Log'}</Badge></td> */}
                                             <td>{trajet.camion_details?.immatriculation || `Camion ${trajet.camion}`}</td>
                                             <td className="text-center">
                                                 {/*   <Badge bg="info">{trajet.n_conteneurs}</Badge> */}

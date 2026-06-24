@@ -18,6 +18,10 @@ import GestionUtilisateurs from './components/GestionUtilisateurs';
 import MonCompte from './components/MonCompte';
 import Destinations from './components/Destinations';
 import SituationTVA from './components/SituationTVA';
+import GestionBureau from './components/Gestionbureau';
+import DocumentsCamion from './components/DocumentsCamion';
+import Notfound from './components/Notfound';
+
 
 
 // Composant pour protéger les routes
@@ -32,7 +36,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 // Composant principal avec gestion de l'espacement
-function AppContent() {
+export function AppContent() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
 
@@ -85,7 +89,6 @@ function AppContent() {
               <Facturation />
             </ProtectedRoute>
           } />
-          // Dans votre composant Routes, ajoutez :
           <Route path="/gestion-utilisateurs" element={
             <ProtectedRoute>
               <GestionUtilisateurs />
@@ -106,6 +109,10 @@ function AppContent() {
               <SituationTVA />
             </ProtectedRoute>
           } />
+          <Route path="/gestion-bureau" element={<ProtectedRoute><GestionBureau /></ProtectedRoute>} />
+
+          <Route path="/documents-camion" element={<ProtectedRoute><DocumentsCamion /></ProtectedRoute>} />
+          <Route path="*" element={<Notfound />} />
         </Routes>
       </div>
     </div>

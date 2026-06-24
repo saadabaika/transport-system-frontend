@@ -4,6 +4,9 @@ const isProduction = window.location.protocol === 'https:';
 export const API_BASE_URL = isProduction 
     ? 'https://164.90.221.86/api' 
     : 'http://164.90.221.86:8080/api';
+// export const API_BASE_URL = 'http://localhost:8000/api';
+// export const MEDIA_BASE_URL = 'http://localhost:8000';  // ⭐ AJOUTER CETTE LIGNE
+
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -169,4 +172,25 @@ export const tvaService = {
     declarer: (id, data) => api.post(`/declarations-tva/${id}/declarer/`, data),
     marquerPayee: (id) => api.post(`/declarations-tva/${id}/marquer_payee/`),
 };
+
+// Services Charges Bureau
+export const chargeBureauService = {
+    getAll: (params) => api.get('/charges-bureau/', { params }),
+    getById: (id) => api.get(`/charges-bureau/${id}/`),
+    create: (data) => api.post('/charges-bureau/', data),
+    update: (id, data) => api.put(`/charges-bureau/${id}/`, data),
+    delete: (id) => api.delete(`/charges-bureau/${id}/`),
+    getStatistiques: (params) => api.get('/charges-bureau/statistiques/', { params }),
+};
+
+export const documentCamionService = {
+    getAll: (params) => api.get('/documents-camion/', { params }),
+    getByCamion: (camionId) => api.get('/documents-camion/', { params: { camion_id: camionId } }),
+    getById: (id) => api.get(`/documents-camion/${id}/`),
+    create: (data) => api.post('/documents-camion/', data),
+    update: (id, data) => api.put(`/documents-camion/${id}/`, data),
+    delete: (id) => api.delete(`/documents-camion/${id}/`),
+    getAlertes: (params) => api.get('/documents-camion/alertes/', { params }),
+};
+
 export default api;
