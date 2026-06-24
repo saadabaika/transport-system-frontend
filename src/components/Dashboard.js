@@ -2460,7 +2460,7 @@ function Dashboard() {
                                                                 <strong>{camionStats.camion.immatriculation}</strong>
                                                                 <br />
                                                                 <small className="text-muted">
-                                                                   
+
                                                                 </small>
                                                             </td>
                                                             <td className="text-center">
@@ -2591,8 +2591,8 @@ function Dashboard() {
                                                         {/* En-tête du camion - une ligne */}
                                                         <div className="d-flex justify-content-between align-items-center mb-1">
                                                             <div className="d-flex align-items-center gap-2">
-                                                                <strong style={{ fontSize: '13px' }}>{camionStats.camion.immatriculation}</strong>
-                                                                
+                                                                <strong style={{ fontSize: '18px' }}>{camionStats.camion.immatriculation}</strong>
+
                                                             </div>
                                                             <Badge bg={camionStats.bilan >= 0 ? 'success' : 'danger'} style={{ fontSize: '9px' }}>
                                                                 {camionStats.bilan >= 0 ? '✅' : '❌'}
@@ -2618,12 +2618,12 @@ function Dashboard() {
                                                                 </div>
                                                             </div>
                                                             <div className="text-end">
-                                                                <div style={{ fontSize: '10px' }}>
+                                                                <div style={{ fontSize: '12px' }}>
                                                                     <span className="text-success">{camionStats.totalRevenus.toLocaleString()} DH</span>
                                                                     <span className="text-muted mx-1">|</span>
                                                                     <span className="text-danger">{camionStats.totalCharges.toLocaleString()} DH</span>
                                                                 </div>
-                                                                <strong className={camionStats.bilan >= 0 ? 'text-success' : 'text-danger'} style={{ fontSize: '11px' }}>
+                                                                <strong className={camionStats.bilan >= 0 ? 'text-success' : 'text-danger'} style={{ fontSize: '18px' }}>
                                                                     {camionStats.bilan.toLocaleString()} DH
                                                                 </strong>
                                                             </div>
@@ -2652,7 +2652,7 @@ function Dashboard() {
                                                             {statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalTrajets || 0), 0) || 0} trajets
                                                         </Badge>
                                                     </div>
-                                                    <div className="d-flex justify-content-between align-items-center" style={{ fontSize: '11px' }}>
+                                                    <div className="d-flex justify-content-between align-items-center" style={{ fontSize: '15px' }}>
                                                         <div>
                                                             <span className="text-success">{statistiquesDetaillees?.camionsAvecStats?.reduce((total, camion) => total + (camion.totalRevenus || 0), 0).toLocaleString() || '0'} DH</span>
                                                             <span className="text-muted mx-1">|</span>
