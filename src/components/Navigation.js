@@ -35,31 +35,7 @@ function Navigation() {
         return () => { document.body.style.overflow = ''; };
     }, [mobileOpen]);
 
-    // Ajoute ce useEffect dans ton composant Navigation
-    useEffect(() => {
-        let startY = 0;
-        // ← supprime "let isPulling = false;" c'est inutile
-
-        const handleTouchStart = (e) => {
-            startY = e.touches[0].clientY;
-        };
-
-        const handleTouchEnd = (e) => {
-            const endY = e.changedTouches[0].clientY;
-            const diff = endY - startY;
-            if (window.scrollY === 0 && diff > 80) {
-                window.location.reload();
-            }
-        };
-
-        document.addEventListener('touchstart', handleTouchStart);
-        document.addEventListener('touchend', handleTouchEnd);
-
-        return () => {
-            document.removeEventListener('touchstart', handleTouchStart);
-            document.removeEventListener('touchend', handleTouchEnd);
-        };
-    }, []);
+   
     // Close mobile on route change
     useEffect(() => {
         setMobileOpen(false);
